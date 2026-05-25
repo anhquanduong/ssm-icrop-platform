@@ -202,6 +202,11 @@ def authenticate_secure_user(username: str, password: str, ip_address: str = "12
             
         uid, pwd_hash, is_verified, lockout_until, attempts, email, name, workplace = row
         
+        # Resolve the canonical DB username (user may have logged in via email)
+        cursor.execute("SELECT username FROM users WHERE id = ?", (uid,))
+        uname_row = cursor.fetchone()
+        db_username = uname_row[0] if uname_row else username_clean
+        
         # 1. Progressive lockout check
         if lockout_until:
             lockout_time = datetime.fromisoformat(lockout_until)
@@ -211,13 +216,13 @@ def authenticate_secure_user(username: str, password: str, ip_address: str = "12
                 return False, f"Account temporarily locked due to failed attempts. Try again in {remaining_min} minutes.", None
             else:
                 # Lockout time passed, clear attempts dynamically
-                db.reset_failed_attempts(username_clean)
+                db.reset_failed_attempts(db_username)
                 attempts = 0
                 
         # 2. Check Password
         if verify_password(pwd_hash, password):
-            # Success! Reset failed attempts
-            db.reset_failed_attempts(username_clean)
+            # Success! Reset failed attempts using canonical DB username
+            db.reset_failed_attempts(db_username)
             db.log_security_event(uid, "User logged in successfully", ip_address)
             
             # Derive secure session key unique to that user session
@@ -228,7 +233,7 @@ def authenticate_secure_user(username: str, password: str, ip_address: str = "12
             # Enforce session verification parameters payload
             user_payload = {
                 "user_id": uid,
-                "username": username_clean,
+                "username": db_username,  # always return the canonical DB username
                 "email": email,
                 "name": name,
                 "workplace": workplace,
@@ -238,12 +243,12 @@ def authenticate_secure_user(username: str, password: str, ip_address: str = "12
             }
             return True, "Login successful!", user_payload
         else:
-            # Failed attempt! Increment attempts
-            new_attempts = db.increment_failed_attempts(username_clean)
+            # Failed attempt — use canonical DB username so the UPDATE hits the right row
+            new_attempts = db.increment_failed_attempts(db_username)
             
             if new_attempts >= 5:
-                # progressive lock account for 15 minutes
-                db.lock_user_account(username_clean, 15)
+                # Progressive lock: 15 minutes
+                db.lock_user_account(db_username, 15)
                 db.log_security_event(uid, f"Suspicious Activity: Account locked out (Attempts={new_attempts})", ip_address)
                 return False, "Authentication failed. Account has been locked for 15 minutes due to too many failed attempts.", None
             else:
@@ -320,7 +325,7 @@ def resend_verification_email(email_or_username: str) -> Tuple[bool, str]:
         uid, uname, uemail, name, is_verified, last_sent = row
         
         if is_verified == 1:
-            return False, "This account has already been verified and activated. Please sign in!"
+            return False, "This account has already been verified and activated. Please sign in using the Sign In tab. If you have forgotten your password, use the Forgot Password tab to request a reset link."
             
         # Check rate-limiting cooldown (2 minutes / 120 seconds)
         if last_sent is not None:
