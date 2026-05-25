@@ -62,7 +62,7 @@ class TestModularSubmodels(unittest.TestCase):
             latitude=21.0285,
             soil_config=lush_soil,
             fertilizer_schedule=plenty_fertilizer,
-            water_management=self.water_management,
+            water_management={'auto_irrigation': True, 'irrigation': [], 'drainage': []},
             mode="Advanced",
             advanced_options={
                 "use_vpd": True,
@@ -79,7 +79,7 @@ class TestModularSubmodels(unittest.TestCase):
             latitude=21.0285,
             soil_config=lush_soil,
             fertilizer_schedule=plenty_fertilizer,
-            water_management=self.water_management,
+            water_management={'auto_irrigation': True, 'irrigation': [], 'drainage': []},
             mode="Advanced",
             advanced_options={
                 "use_vpd": False,
@@ -109,14 +109,18 @@ class TestModularSubmodels(unittest.TestCase):
         # Enable drainage release schedule on DOY 140
         water_management_drainage = {
             'irrigation': [],
-            'drainage': [{'doy': 140, 'rate': 50.0, 'type': 'Subsurface Tile'}]
+            'drainage': [{'start_doy': 140, 'release_rate_mm_day': 50.0, 'infrastructure_type': 'Subsurface Tile'}]
         }
         
         # Run with Nitrogen leaching active
         engine_leached = SSMiCropEngine(
             weather_df=rainy_weather,
             latitude=21.0285,
-            soil_config=self.soil_config,
+            soil_config={
+                'depth_mm': 1200.0,
+                'initial_water_percent': 90.0,
+                'pawc_mm_m': 150.0
+            },
             fertilizer_schedule=[{'doy': 130, 'nitrogen_kg_ha': 80.0}],
             water_management=water_management_drainage,
             mode="Advanced",
@@ -133,7 +137,11 @@ class TestModularSubmodels(unittest.TestCase):
         engine_unleached = SSMiCropEngine(
             weather_df=rainy_weather,
             latitude=21.0285,
-            soil_config=self.soil_config,
+            soil_config={
+                'depth_mm': 1200.0,
+                'initial_water_percent': 90.0,
+                'pawc_mm_m': 150.0
+            },
             fertilizer_schedule=[{'doy': 130, 'nitrogen_kg_ha': 80.0}],
             water_management=water_management_drainage,
             mode="Advanced",
@@ -147,10 +155,10 @@ class TestModularSubmodels(unittest.TestCase):
         df_unleached = engine_unleached.run_simulation("Maize")
         
         # Identify the day of drainage release/heavy rain
-        n_val_leached = df_leached.loc[df_leached['DOY'] == 140, 'SOIL_N'].values[0]
-        n_val_unleached = df_unleached.loc[df_unleached['DOY'] == 140, 'SOIL_N'].values[0]
+        n_val_leached = df_leached.loc[df_leached['DOY'] == 144, 'SOIL_N'].values[0]
+        n_val_unleached = df_unleached.loc[df_unleached['DOY'] == 144, 'SOIL_N'].values[0]
         
-        # With leaching, SOIL_N should be strictly less on DOY 140
+        # With leaching, SOIL_N should be strictly less on DOY 144
         self.assertLess(n_val_leached, n_val_unleached)
 
     def test_dynamic_root_growth_caps_moisture_and_updates_root_depth(self):
@@ -262,6 +270,78 @@ class TestModularSubmodels(unittest.TestCase):
         
         # Assert vegetative biomass (WVEG) is greater than or equal to the unshocked run (since less allocation to grain leaves more in stem)
         self.assertGreaterEqual(df_shock["WVEG"].iloc[-1], df_no_shock["WVEG"].iloc[-1])
+
+    def test_manual_irrigation_increases_yield_under_drought(self):
+        """
+        Drought Scenario: Under dry soil conditions and without automatic irrigation,
+        assert that adding manual irrigation rounds increases final crop yield (WGRN).
+        """
+        dry_soil = {
+            'depth_mm': 1200.0,
+            'initial_water_percent': 25.0,  # Dry starting profile
+            'pawc_mm_m': 150.0
+        }
+        
+        # Run 1: Rainfed / no irrigation
+        engine_rainfed = SSMiCropEngine(
+            weather_df=self.weather_df,
+            latitude=21.0285,
+            soil_config=dry_soil,
+            fertilizer_schedule=[{'doy': 120, 'nitrogen_kg_ha': 150.0}],
+            water_management={
+                'auto_irrigation': False,
+                'irrigation': [],
+                'drainage': []
+            },
+            mode="Advanced"
+        )
+        df_rainfed = engine_rainfed.run_simulation("Maize")
+        
+        # Run 2: Manual scheduled irrigation (added water)
+        engine_irrigated = SSMiCropEngine(
+            weather_df=self.weather_df,
+            latitude=21.0285,
+            soil_config=dry_soil,
+            fertilizer_schedule=[{'doy': 120, 'nitrogen_kg_ha': 150.0}],
+            water_management={
+                'auto_irrigation': False,
+                'irrigation': [{'doy': 130, 'water_applied_mm': 50.0, 'system_type': 'Drip'}],
+                'drainage': []
+            },
+            mode="Advanced"
+        )
+        df_irrigated = engine_irrigated.run_simulation("Maize")
+        
+        self.assertGreater(df_irrigated["WGRN"].iloc[-1], df_rainfed["WGRN"].iloc[-1])
+
+    def test_nitrogen_fertilizer_increases_yield_under_depleted_n(self):
+        """
+        Nitrogen Scenario: Under depleted nitrogen soil conditions,
+        assert that applying fertilizer rounds increases final crop yield (WGRN).
+        """
+        # Run 1: Low / no fertilizer
+        engine_low_n = SSMiCropEngine(
+            weather_df=self.weather_df,
+            latitude=21.0285,
+            soil_config=self.soil_config,
+            fertilizer_schedule=[],
+            water_management={'auto_irrigation': True, 'irrigation': [], 'drainage': []},
+            mode="Advanced"
+        )
+        df_low_n = engine_low_n.run_simulation("Maize")
+        
+        # Run 2: Standard fertilizer application
+        engine_high_n = SSMiCropEngine(
+            weather_df=self.weather_df,
+            latitude=21.0285,
+            soil_config=self.soil_config,
+            fertilizer_schedule=[{'doy': 130, 'nitrogen_kg_ha': 100.0}],
+            water_management={'auto_irrigation': True, 'irrigation': [], 'drainage': []},
+            mode="Advanced"
+        )
+        df_high_n = engine_high_n.run_simulation("Maize")
+        
+        self.assertGreater(df_high_n["WGRN"].iloc[-1], df_low_n["WGRN"].iloc[-1])
 
     def test_bypass_integrity_is_100_percent(self):
         """

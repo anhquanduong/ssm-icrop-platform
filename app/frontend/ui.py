@@ -965,6 +965,13 @@ with col_left:
                 
     # 3. IRRIGATION & DRAINAGE WATER REGIME CONTROL (Dynamic Rows)
     with st.expander("💧 Water Management (Irrigation & Drainage)", expanded=False):
+        st.selectbox(
+            "Irrigation Mode",
+            ["Rainfed / Manual Scheduler", "Automatic Irrigation (Maintain >50% Soil Moisture)"],
+            key="auto_irrigation_key",
+            help="Choose 'Rainfed / Manual Scheduler' to run simulation under natural rainfall and any manually configured irrigation events, or select 'Automatic' to automatically irrigate back to field capacity whenever root zone moisture falls below 50% capacity."
+        )
+        st.markdown("---")
         st.markdown("##### 🚿 Irrigation Events Scheduler")
         col_irr_add, col_irr_remove = st.columns(2)
         if col_irr_add.button("➕ Add Irrigation Round", key="add_irr_round_btn"):
@@ -1135,6 +1142,7 @@ with col_right:
                 ]
                 
                 water_management = {
+                    "auto_irrigation": "Automatic" in st.session_state.get("auto_irrigation_key", "Rainfed / Manual Scheduler"),
                     "irrigation": [
                         {
                             "doy": int(item["doy"]),

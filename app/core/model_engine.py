@@ -173,6 +173,12 @@ class SSMiCropEngine:
             self.soil_params = soil_params
             
         self.soil_config = soil_config or {}
+        
+        # Dynamically set initial soil moisture relative capacity (MAI) based on initial_water_percent
+        if "initial_water_percent" in self.soil_config:
+            init_fraction = max(0.0, min(1.0, self.soil_config["initial_water_percent"] / 100.0))
+            self.soil_params = self.soil_params.copy()
+            self.soil_params["MAI"] = [init_fraction] * self.soil_params.get("NLYER", 5)
         self.fertilizer_schedule = fertilizer_schedule or []
         self.water_management = water_management or {}
         self.mode = mode
@@ -780,10 +786,8 @@ class SSMiCropEngine:
             if self.mode == "Advanced":
                 irgw = 0.0
                 
-                # Simple irrigation logic: Automatic if water == 1
-                # FTSWRZ drops below threshold => supply = field capacity deficit
-                # Default triggers automatic irrigation if not rainfed
-                if FTSWRZ_flag := True:
+                # Only run automatic irrigation if explicitly requested in water_management
+                if self.water_management.get("auto_irrigation", False):
                     # Target field capacity represents full root zone capacity
                     if fts_wrz <= 0.5 and cbd < bd_tsg:
                         # Root zone water capacity deficit
@@ -896,7 +900,7 @@ class SSMiCropEngine:
                     
                 # Redistribute layer by layer (gravity cascading drainage)
                 for l in range(nlayer):
-                    flin_l = rain + irgw - runof if l == 0 else flout[l-1]
+                    flin_l = rain + irgw + irr_today - runof if l == 0 else flout[l-1]
                     wl[l] = wl[l] + flin_l - wu[l] - se[l]
                     flout[l] = max(0.0, (wl[l] - wlul[l]) * drainf[l])
                     wl[l] = wl[l] - flout[l]
@@ -931,6 +935,10 @@ class SSMiCropEngine:
                     
                 if fldur > fldkil:
                     cbd = bd_tsg  # Abort growth loop / accelerate senescence
+                    
+                # Synchronize single-layer trackers with physical 5-layer root zone water capacities
+                self.current_soil_water = ats_wrz
+                self.total_storage_capacity = max(1.0, tts_wrz)
             else:
                 irgw = 0.0
                 drain = 0.0
