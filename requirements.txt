@@ -1,4 +1,4 @@
-﻿streamlit
+streamlit
 streamlit-folium
 folium
 pandas
@@ -6,3 +6,5 @@ openpyxl
 plotly
 requests
 cryptography
+xlrd
+
