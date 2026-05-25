@@ -8,6 +8,8 @@ __pycache__/
 
 # Exclude secrets & keys
 .streamlit/secrets.toml
+Email_16code.txt
+*.txt
 
 # Exclude local database copies containing test user credentials
 *.db

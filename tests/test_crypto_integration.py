@@ -114,7 +114,8 @@ class TestCropCryptoIntegration(unittest.TestCase):
         self.assertTrue(pub_id > 0)
         
         # Verify in raw database directly that public profile parameters_json is plain JSON
-        with sqlite3.connect(self.temp_db_path) as conn:
+        conn = sqlite3.connect(self.temp_db_path)
+        try:
             cursor = conn.cursor()
             cursor.execute("SELECT parameters_json FROM crop_profiles WHERE id = ?", (pub_id,))
             raw_payload = cursor.fetchone()[0]
@@ -122,6 +123,8 @@ class TestCropCryptoIntegration(unittest.TestCase):
             parsed = json.loads(raw_payload)
             self.assertEqual(parsed["CROP"], "Maize")
             self.assertEqual(parsed["TBD"], 8.0)
+        finally:
+            conn.close()
             
         # 2. Save Private crop profile (should be encrypted)
         priv_id = self.db.save_crop_profile(
@@ -134,7 +137,8 @@ class TestCropCryptoIntegration(unittest.TestCase):
         self.assertTrue(priv_id > 0)
         
         # Verify in raw database directly that private profile is encrypted (NOT plain text JSON)
-        with sqlite3.connect(self.temp_db_path) as conn:
+        conn = sqlite3.connect(self.temp_db_path)
+        try:
             cursor = conn.cursor()
             cursor.execute("SELECT parameters_json FROM crop_profiles WHERE id = ?", (priv_id,))
             raw_payload = cursor.fetchone()[0]
@@ -146,6 +150,8 @@ class TestCropCryptoIntegration(unittest.TestCase):
             decrypted = CropCryptoVault.decrypt_parameters(raw_payload.encode('utf-8'), self.session_key)
             parsed = json.loads(decrypted)
             self.assertEqual(parsed["CROP"], "Maize")
+        finally:
+            conn.close()
             
         # 3. Save Private without session key should raise ValueError
         with self.assertRaises(ValueError):

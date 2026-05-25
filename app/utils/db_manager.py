@@ -3,6 +3,7 @@ import os
 import json
 import logging
 from typing import List, Dict, Any, Optional, Tuple
+from contextlib import contextmanager
 
 logger = logging.getLogger(__name__)
 
@@ -27,13 +28,18 @@ class DatabaseManager:
         os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
         self.initialize_schema()
 
+    @contextmanager
     def get_connection(self) -> sqlite3.Connection:
         """
-        Returns a raw connection to the SQLite database.
+        Yields a secure connection to the SQLite database and guarantees its clean closure on exit.
         """
         conn = sqlite3.connect(self.db_path)
         conn.execute("PRAGMA foreign_keys = ON;") # Enforce FK constraints
-        return conn
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def initialize_schema(self):
         """
