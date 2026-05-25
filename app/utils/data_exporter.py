@@ -73,6 +73,14 @@ def export_history_to_xlsx(sim_history: dict,
     # Render Dashboard Header Block
     ws_summary.cell(row=1, column=1, value="BOKU SSM-iCrop Simulation Summary Report").font = font_title
     
+    # Check if any scenario in sim_history was executed in Potential ("Classic") mode
+    management_status = "Active"
+    for label, df in sim_history.items():
+        fidelity = df["Model_Fidelity"].iloc[0] if "Model_Fidelity" in df.columns else "Advanced"
+        if "Classic" in str(fidelity) or "Potential" in str(fidelity):
+            management_status = "Ignored (Potential Baseline)"
+            break
+
     # Render Coordinates and Soil Profile settings metadata rows
     metadata = [
         ("Metadata Parameter", "Configuration Value"),
@@ -83,6 +91,7 @@ def export_history_to_xlsx(sim_history: dict,
         ("Initial Soil Water Content (% Vol)", soil_config.get("initial_water_percent", "-")),
         ("Plant Available Water Capacity (PAWC) (mm/m)", soil_config.get("pawc_mm_m", "-")),
         ("Soil Organic Matter (SOM) (%)", soil_config.get("som_percent", "-")),
+        ("Management", management_status),
     ]
     
     meta_start_row = 3
@@ -187,7 +196,7 @@ def export_history_to_xlsx(sim_history: dict,
                 # Apply exact cell alignments and numeric formatting masks based on column names
                 col_name = combined_df.columns[c_idx - 1]
                 
-                if col_name in ["Scenario", "Model_Fidelity"]:
+                if col_name in ["Scenario", "Model_Fidelity", "Management"]:
                     cell.alignment = align_left
                 elif col_name == "DOY":
                     cell.alignment = align_center

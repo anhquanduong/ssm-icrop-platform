@@ -182,12 +182,16 @@ class SSMiCropEngine:
         self.fertilizer_schedule = fertilizer_schedule or []
         self.water_management = water_management or {}
         self.mode = mode
-        self.advanced_options = advanced_options or {
+        self.advanced_options = advanced_options.copy() if advanced_options is not None else {
             "use_vpd": False,
             "use_leaching": False,
             "use_root_growth": False,
             "use_heat_shock": False
         }
+        if "use_moisture" not in self.advanced_options:
+            self.advanced_options["use_moisture"] = True
+        if "use_nitrogen" not in self.advanced_options:
+            self.advanced_options["use_nitrogen"] = True
         self.pawc = self.soil_config.get("pawc_mm_m", 150.0)
         
         # 1. INITIALIZE DAILY STORAGE TRAITS
@@ -265,6 +269,27 @@ class SSMiCropEngine:
             raise ValueError(f"Crop type '{crop_type}' is not supported. Supported crops: Maize, Sorghum")
         
         cp = DEFAULT_CROP_PARAMETERS[crop_type]
+        
+        # Check if all advanced modular switches are disabled
+        all_stresses_disabled = False
+        if self.mode == "Advanced":
+            all_stresses_disabled = not (
+                self.advanced_options.get("use_vpd", False) or
+                self.advanced_options.get("use_leaching", False) or
+                self.advanced_options.get("use_root_growth", False) or
+                self.advanced_options.get("use_heat_shock", False)
+            )
+            
+        # Determine active biophysical process flags
+        use_vpd = self.advanced_options.get("use_vpd", False)
+        use_moisture = self.advanced_options.get("use_moisture", True)
+        use_nitrogen = self.advanced_options.get("use_nitrogen", True)
+        
+        # If all modular options are unchecked, fall back to perfect conditions
+        if all_stresses_disabled:
+            use_vpd = False
+            use_moisture = False
+            use_nitrogen = False
         
         # Extract cardinal temperature and GDD coefficients
         tbd = cp["TBD"]
@@ -385,11 +410,6 @@ class SSMiCropEngine:
         dap = 0
         cbd = 0.0
         
-        # Dynamic initial root capacity pool setup
-        if self.mode == "Advanced" and self.advanced_options.get("use_root_growth", False):
-            self.total_storage_capacity = max(1.0, ideport * (self.pawc / 1000.0))
-            self.current_soil_water = min(self.current_soil_water, self.total_storage_capacity)
-        
         msnn = 1.0
         lai = 0.0
         glai = 0.0
@@ -413,6 +433,17 @@ class SSMiCropEngine:
         dhi = 0.0
         
         deport = ideport
+        
+        # Dynamic initial root capacity & soil water / nutrient pool setup
+        if self.mode == "Advanced":
+            self.current_soil_n = self.soil_config.get("initial_n", 150.0)
+            if self.advanced_options.get("use_root_growth", False):
+                self.total_storage_capacity = max(1.0, ideport * (self.pawc / 1000.0))
+            else:
+                deport = meed
+                self.total_storage_capacity = max(1.0, deport * (self.pawc / 1000.0))
+            self.current_soil_water = self.total_storage_capacity
+
         dyse = 1
         crain = 0.0
         cirgw = 0.0
@@ -468,6 +499,10 @@ class SSMiCropEngine:
             
             tmp = (tmax + tmin) / 2.0
             
+            # Initialize Nitrogen variables for the day
+            SNAVL = self.current_soil_n
+            Daily_Crop_Nitrogen_Uptake = 0.0
+            
             if self.mode == "Advanced":
                 # --- 2. THE DAILY SOIL WATER BALANCE LOOP ---
                 # Extract daily scheduled irrigation amount (mm) for this DOY
@@ -510,24 +545,28 @@ class SSMiCropEngine:
                 ftsw = self.current_soil_water / self.total_storage_capacity if self.total_storage_capacity > 0.0 else 0.0
                 ftsw = np.clip(ftsw, 0.0, 1.0)
                 
-                if ftsw < 0.3:
-                    # Deficit / Drought penalty drops linearly to 0
-                    f_water = ftsw / 0.3
-                elif ftsw > 0.95:
-                    # Waterlogging oxygen-deficit penalty drops linearly to 0 at complete saturation
-                    f_water = (1.0 - ftsw) / 0.05
+                if use_moisture:
+                    if ftsw < 0.3:
+                        # Deficit / Drought penalty drops linearly to 0
+                        f_water = ftsw / 0.3
+                    elif ftsw > 0.95:
+                        # Waterlogging oxygen-deficit penalty drops linearly to 0 at complete saturation
+                        f_water = (1.0 - ftsw) / 0.05
+                    else:
+                        f_water = 1.0
+                    f_water = np.clip(f_water, 0.0, 1.0)
                 else:
                     f_water = 1.0
-                f_water = np.clip(f_water, 0.0, 1.0)
 
                 # --- 4. IMPLEMENT LITE NITROGEN AVAILABILITY MODEL (F_nutr) ---
-                n_applied_today = 0.0
+                NFERT = 0.0
                 if self.fertilizer_schedule:
                     for fert in self.fertilizer_schedule:
                         if int(fert.get("doy", 0)) == doy:
-                            n_applied_today += float(fert.get("nitrogen_kg_ha", 0.0))
+                            NFERT += float(fert.get("nitrogen_kg_ha", 0.0))
                 
-                self.current_soil_n += n_applied_today
+                SNAVL += NFERT
+                self.current_soil_n = SNAVL
             else:
                 f_water = 1.0
                 f_nutr = 1.0
@@ -648,7 +687,7 @@ class SSMiCropEngine:
             rue = irue * rue_temp_factor * f_vpd_rue
             fint = 1.0 - np.exp(-kpar * lai)
             
-            if self.mode == "Advanced":
+            if self.mode == "Advanced" and use_nitrogen:
                 # Calculate daily potential biomass growth for N Demand estimation
                 ddmp_pot = srad * 0.48 * fint * rue * temp_stress
                 
@@ -656,16 +695,18 @@ class SSMiCropEngine:
                 n_demand = (ddmp_pot * 10.0) * 0.018
                 
                 if n_demand > 0.0:
-                    if self.current_soil_n >= n_demand:
+                    if SNAVL >= n_demand:
                         f_nutr = 1.0
-                        self.current_soil_n -= n_demand
+                        Daily_Crop_Nitrogen_Uptake = n_demand
                     else:
                         # Nutrient deficit penalizes growth
-                        f_nutr = self.current_soil_n / n_demand
-                        self.current_soil_n = 0.0
+                        f_nutr = SNAVL / n_demand
+                        Daily_Crop_Nitrogen_Uptake = SNAVL
                 else:
                     f_nutr = 1.0
                 f_nutr = np.clip(f_nutr, 0.05, 1.0)
+                SNAVL -= Daily_Crop_Nitrogen_Uptake
+                self.current_soil_n = SNAVL
             else:
                 f_nutr = 1.0
             
@@ -804,9 +845,26 @@ class SSMiCropEngine:
                 cdrain += drain
                 
                 # Nitrogen Leaching sub-model
+                N_Leached_Daily = 0.0
                 if self.advanced_options.get("use_leaching", False) and drain > 0.0:
-                    n_leached = self.current_soil_n * (drain / self.total_storage_capacity)
-                    self.current_soil_n = max(0.0, self.current_soil_n - n_leached)
+                    # Calculate deep drainage (drain)
+                    # Total_Soil_Water_Content is the total water content of the bottom drainage layer (wl[ldrain])
+                    Total_Soil_Water_Content = max(wl[ldrain], 1e-5)
+                    
+                    # Daily leaching fraction based on the ratio of deep drainage (DRAIN) to total soil water content within the layer
+                    leaching_fraction = drain / Total_Soil_Water_Content
+                    
+                    # Limit the fraction to a safe range to ensure mass conservation
+                    leaching_fraction = min(max(leaching_fraction, 0.0), 1.0)
+                    
+                    # Calculate actual mass leached
+                    leaching_efficiency_coefficient = self.advanced_options.get("leaching_efficiency", 0.8)
+                    N_Leached_Daily = SNAVL * leaching_fraction * leaching_efficiency_coefficient
+                    
+                    # Update available soil mineral nitrogen pool
+                    SNAVL -= N_Leached_Daily
+                
+                self.current_soil_n = max(0.0, SNAVL)
                 
                 # Root depth propagation
                 if self.advanced_options.get("use_root_growth", False):
@@ -920,21 +978,28 @@ class SSMiCropEngine:
                 fts_wrz = ats_wrz / tts_wrz if tts_wrz > 0.0 else 0.0
                 
                 # Stresses computation
-                wsfl = 1.0 if fts_wrz > wssl_day else max(0.0, fts_wrz / wssl_day)
-                wsfg = 1.0 if fts_wrz > wssg_day else max(0.0, fts_wrz / wssg_day)
-                wsfd = (1.0 - wsfg) * wssd + 1.0
-                wsxf = 1.0 if wrz <= wrzul else max(0.0, (wrzst - wrz) / (wrzst - wrzul))
-                
-                # Flooding Stress Check
-                if wrz > 0.95 * wrzst:
-                    wsfg = 0.0
-                    wsfl = 0.0
-                    fldur += 1
-                else:
-                    fldur = 0
+                if use_moisture:
+                    wsfl = 1.0 if fts_wrz > wssl_day else max(0.0, fts_wrz / wssl_day)
+                    wsfg = 1.0 if fts_wrz > wssg_day else max(0.0, fts_wrz / wssg_day)
+                    wsfd = (1.0 - wsfg) * wssd + 1.0
+                    wsxf = 1.0 if wrz <= wrzul else max(0.0, (wrzst - wrz) / (wrzst - wrzul))
                     
-                if fldur > fldkil:
-                    cbd = bd_tsg  # Abort growth loop / accelerate senescence
+                    # Flooding Stress Check
+                    if wrz > 0.95 * wrzst:
+                        wsfg = 0.0
+                        wsfl = 0.0
+                        fldur += 1
+                    else:
+                        fldur = 0
+                        
+                    if fldur > fldkil:
+                        cbd = bd_tsg  # Abort growth loop / accelerate senescence
+                else:
+                    wsfl = 1.0
+                    wsfg = 1.0
+                    wsfd = 1.0
+                    wsxf = 1.0
+                    fldur = 0
                     
                 # Synchronize single-layer trackers with physical 5-layer root zone water capacities
                 self.current_soil_water = ats_wrz

@@ -61,7 +61,13 @@ class TestDualMode(unittest.TestCase):
             latitude=21.0285,
             soil_config=self.soil_config,
             fertilizer_schedule=self.fertilizer_schedule,
-            mode="Advanced"
+            mode="Advanced",
+            advanced_options={
+                "use_vpd": True,
+                "use_leaching": True,
+                "use_root_growth": True,
+                "use_heat_shock": True
+            }
         )
         
         results_df = engine_advanced.run_simulation("Maize")

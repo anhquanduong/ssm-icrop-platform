@@ -237,7 +237,7 @@ class TestModularSubmodels(unittest.TestCase):
             latitude=21.0285,
             soil_config=lush_soil,
             fertilizer_schedule=plenty_fertilizer,
-            water_management=self.water_management,
+            water_management={"auto_irrigation": True, "irrigation": [], "drainage": []},
             mode="Advanced",
             advanced_options={
                 "use_vpd": False,
@@ -254,7 +254,7 @@ class TestModularSubmodels(unittest.TestCase):
             latitude=21.0285,
             soil_config=lush_soil,
             fertilizer_schedule=plenty_fertilizer,
-            water_management=self.water_management,
+            water_management={"auto_irrigation": True, "irrigation": [], "drainage": []},
             mode="Advanced",
             advanced_options={
                 "use_vpd": False,
@@ -293,7 +293,13 @@ class TestModularSubmodels(unittest.TestCase):
                 'irrigation': [],
                 'drainage': []
             },
-            mode="Advanced"
+            mode="Advanced",
+            advanced_options={
+                "use_vpd": True,
+                "use_leaching": True,
+                "use_root_growth": True,
+                "use_heat_shock": True
+            }
         )
         df_rainfed = engine_rainfed.run_simulation("Maize")
         
@@ -308,7 +314,13 @@ class TestModularSubmodels(unittest.TestCase):
                 'irrigation': [{'doy': 130, 'water_applied_mm': 50.0, 'system_type': 'Drip'}],
                 'drainage': []
             },
-            mode="Advanced"
+            mode="Advanced",
+            advanced_options={
+                "use_vpd": True,
+                "use_leaching": True,
+                "use_root_growth": True,
+                "use_heat_shock": True
+            }
         )
         df_irrigated = engine_irrigated.run_simulation("Maize")
         
@@ -326,7 +338,13 @@ class TestModularSubmodels(unittest.TestCase):
             soil_config=self.soil_config,
             fertilizer_schedule=[],
             water_management={'auto_irrigation': True, 'irrigation': [], 'drainage': []},
-            mode="Advanced"
+            mode="Advanced",
+            advanced_options={
+                "use_vpd": True,
+                "use_leaching": True,
+                "use_root_growth": True,
+                "use_heat_shock": True
+            }
         )
         df_low_n = engine_low_n.run_simulation("Maize")
         
@@ -337,11 +355,65 @@ class TestModularSubmodels(unittest.TestCase):
             soil_config=self.soil_config,
             fertilizer_schedule=[{'doy': 130, 'nitrogen_kg_ha': 100.0}],
             water_management={'auto_irrigation': True, 'irrigation': [], 'drainage': []},
-            mode="Advanced"
+            mode="Advanced",
+            advanced_options={
+                "use_vpd": True,
+                "use_leaching": True,
+                "use_root_growth": True,
+                "use_heat_shock": True
+            }
         )
         df_high_n = engine_high_n.run_simulation("Maize")
         
         self.assertGreater(df_high_n["WGRN"].iloc[-1], df_low_n["WGRN"].iloc[-1])
+
+    def test_nitrogen_sensitivity_under_leaching(self):
+        """
+        Sensitivity Scenario: Under leaching conditions, verifying that applying 200 kg N/ha
+        provides a substantially higher nitrogen pool and yield than applying 30 kg N/ha,
+        proving crop response sensitivity to the fertilizer amount under solute transport.
+        """
+        depleted_soil = self.soil_config.copy()
+        depleted_soil['initial_n'] = 30.0
+
+        # Run 1: Low fertilizer (30 kg N/ha)
+        engine_low = SSMiCropEngine(
+            weather_df=self.weather_df,
+            latitude=21.0285,
+            soil_config=depleted_soil,
+            fertilizer_schedule=[{'doy': 120, 'nitrogen_kg_ha': 30.0}],
+            water_management={'auto_irrigation': True, 'irrigation': [], 'drainage': []},
+            mode="Advanced",
+            advanced_options={
+                "use_vpd": True,
+                "use_leaching": True,
+                "use_root_growth": True,
+                "use_heat_shock": True
+            }
+        )
+        df_low = engine_low.run_simulation("Maize")
+        
+        # Run 2: High fertilizer (200 kg N/ha)
+        engine_high = SSMiCropEngine(
+            weather_df=self.weather_df,
+            latitude=21.0285,
+            soil_config=depleted_soil,
+            fertilizer_schedule=[{'doy': 120, 'nitrogen_kg_ha': 200.0}],
+            water_management={'auto_irrigation': True, 'irrigation': [], 'drainage': []},
+            mode="Advanced",
+            advanced_options={
+                "use_vpd": True,
+                "use_leaching": True,
+                "use_root_growth": True,
+                "use_heat_shock": True
+            }
+        )
+        df_high = engine_high.run_simulation("Maize")
+        
+        # Verify that 200 kg N/ha yields higher than 30 kg N/ha
+        self.assertGreater(df_high["WGRN"].iloc[-1], df_low["WGRN"].iloc[-1])
+        # Verify that total biomass (WTOP) is also higher
+        self.assertGreater(df_high["WTOP"].iloc[-1], df_low["WTOP"].iloc[-1])
 
     def test_bypass_integrity_is_100_percent(self):
         """

@@ -47,6 +47,9 @@ cmd /c "%VENV_DIR%\Scripts\pip install -q --upgrade pip && %VENV_DIR%\Scripts\pi
 rem Activate the workstation-specific relative virtual environment
 call %VENV_DIR%\Scripts\activate
 
+echo Checking/installing dependencies from requirements.txt...
+pip install -q -r requirements.txt
+
 echo "SSM-iCrop Environment Ready. Launching dashboard..."
 streamlit run app/frontend/ui.py
 

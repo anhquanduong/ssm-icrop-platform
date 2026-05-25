@@ -25,6 +25,10 @@ def format_simulation_run(results_df: pd.DataFrame, scenario_name: str) -> pd.Da
             
     logger.info(f"Formatting simulation run '{scenario_name}' for history comparison ledger.")
     
+    fidelity_arr = results_df["Model_Fidelity"].values if "Model_Fidelity" in results_df.columns else ["Advanced"] * len(results_df)
+    first_fidelity = fidelity_arr[0] if len(fidelity_arr) > 0 else "Advanced"
+    mgt_status = "Ignored (Potential Baseline)" if first_fidelity == "Classic" else "Active"
+    
     # Extract columns, converting WTOP (g/m²) to BIOMASS (kg/ha)
     compiled_df = pd.DataFrame({
         "DOY": results_df["DOY"].values,
@@ -32,7 +36,8 @@ def format_simulation_run(results_df: pd.DataFrame, scenario_name: str) -> pd.Da
         "LAI": results_df["LAI"].values,
         "F_WATER": results_df["F_WATER"].values if "F_WATER" in results_df.columns else [1.0] * len(results_df),
         "F_NUTR": results_df["F_NUTR"].values if "F_NUTR" in results_df.columns else [1.0] * len(results_df),
-        "Model_Fidelity": results_df["Model_Fidelity"].values if "Model_Fidelity" in results_df.columns else ["Advanced"] * len(results_df),
+        "Model_Fidelity": fidelity_arr,
+        "Management": [mgt_status] * len(results_df),
         "Scenario": scenario_name
     })
     

@@ -684,6 +684,7 @@ with col_left:
         help="Choose 'Original SSM-iCrop (Potential Yield)' to run textbook potential yields bypass soil moisture/nutrient stresses entirely, or select 'Advanced' for full biophysical environmental simulation."
     )
     engine_mode = "Classic" if "Original" in sim_mode_selection else "Advanced"
+    is_potential_mode = "Original" in sim_mode_selection
     
     advanced_options = {}
     if engine_mode == "Advanced":
@@ -903,6 +904,8 @@ with col_left:
 
     # 2. CROP NUTRITION & FERTILIZER SCHEDULES (Dynamic Rows)
     with st.expander("🧪 Crop Nutrition & Fertilizer Management", expanded=False):
+        if is_potential_mode:
+            st.warning("⚠️ **Note:** You are currently in **Potential Yield Mode**. Under this textbook configuration, the engine assumes infinite soil nutrients. Your NPK rounds below will be recorded but will **not** alter the biomass curve. Switch to **Advanced Agro-Climate Mode** to simulate nutrient deficiencies.")
         col_add, col_remove = st.columns(2)
         if col_add.button("➕ Add Fertilizer Round", key="add_fert_round_btn"):
             st.session_state.fertilizer_rounds.append(
@@ -965,6 +968,8 @@ with col_left:
                 
     # 3. IRRIGATION & DRAINAGE WATER REGIME CONTROL (Dynamic Rows)
     with st.expander("💧 Water Management (Irrigation & Drainage)", expanded=False):
+        if is_potential_mode:
+            st.warning("⚠️ **Note:** You are currently in **Potential Yield Mode**. The engine assumes perfect, non-limiting soil moisture conditions. Your irrigation schedule below will **not** alter the growth matrix. Switch to **Advanced Agro-Climate Mode** to activate drought/waterlogging physics.")
         st.selectbox(
             "Irrigation Mode",
             ["Rainfed / Manual Scheduler", "Automatic Irrigation (Maintain >50% Soil Moisture)"],
