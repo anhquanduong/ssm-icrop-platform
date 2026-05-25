@@ -51,6 +51,7 @@ from utils.auth_secure import (
     request_password_reset, 
     execute_password_reset_token, 
     update_user_profile,
+    resend_verification_email,
     LOCAL_MAILBOX_SIMULATOR
 )
 
@@ -259,7 +260,7 @@ if not st.session_state.logged_in:
     st.markdown('<div class="main-title">SSM-iCrop Security Gateway</div>', unsafe_allow_html=True)
     st.markdown('<div class="sub-title">Authenticate your research account to run crop simulations and access shared datasets.</div>', unsafe_allow_html=True)
     
-    tab_login, tab_register, tab_forgot = st.tabs(["🔑 Sign In", "📝 Register Account", "🔒 Forgot Password"])
+    tab_login, tab_register, tab_forgot, tab_resend = st.tabs(["🔑 Sign In", "📝 Register Account", "🔒 Forgot Password", "📧 Resend Verification"])
     
     with tab_login:
         login_user = st.text_input("Username or Email", key="login_user_field")
@@ -334,7 +335,47 @@ if not st.session_state.logged_in:
                         lnks = re.findall(r'href="(.*?)"', m["body_html"])
                         if lnks:
                             st.markdown(f"[🔗 Reset Password]({lnks[0]})")
-                            
+
+    with tab_resend:
+        st.subheader("📧 Resend Account Activation Link")
+        st.info(
+            "If your original activation email directed you to **localhost** or the link "
+            "has already expired, use this form to request a new one. "
+            "To protect against abuse, you may only request a new link once every **2 minutes**."
+        )
+        resend_identifier = st.text_input(
+            "Email Address or Username",
+            placeholder="Enter the email or username you registered with",
+            key="resend_identifier_field",
+        )
+
+        if st.button("📨 Send New Activation Link", use_container_width=True, key="resend_btn"):
+            if not resend_identifier.strip():
+                st.warning("Please enter your registered email address or username.")
+            else:
+                with st.spinner("Processing your request…"):
+                    resend_ok, resend_msg = resend_verification_email(resend_identifier.strip())
+
+                if resend_ok:
+                    st.success(f"✅ {resend_msg}")
+                else:
+                    # Distinguish cooldown messages from hard errors for UX clarity
+                    if "wait" in resend_msg.lower() and "seconds" in resend_msg.lower():
+                        st.warning(f"⏳ {resend_msg}")
+                    else:
+                        st.error(f"❌ {resend_msg}")
+
+                # Show debug mailbox in offline/local mode
+                if LOCAL_MAILBOX_SIMULATOR and not is_smtp_configured():
+                    with st.expander("📬 Debug Mailbox Simulator (Offline Activation Helper)", expanded=True):
+                        st.info("Offline activation links generated in-memory during local review:")
+                        for m in LOCAL_MAILBOX_SIMULATOR:
+                            if "Verify" in m.get("subject", "") or "Activation" in m.get("subject", ""):
+                                st.write(f"**To:** {m['to']} | **Subject:** {m['subject']}")
+                                lnks = re.findall(r'href="(.*?)"', m["body_html"])
+                                if lnks:
+                                    st.markdown(f"[🔗 Activate Account]({lnks[0]})")
+
     st.stop()
 
 # Header details for authenticated users

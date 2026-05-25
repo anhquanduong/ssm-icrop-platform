@@ -292,6 +292,94 @@ def verify_user_email_token(token: str) -> Tuple[bool, str]:
         db.log_security_event(uid, "Email successfully verified", "127.0.0.1")
         return True, f"Welcome {name}! Your account has been activated. You can now log in."
 
+def resend_verification_email(email_or_username: str) -> Tuple[bool, str]:
+    """
+    Locates an unverified user by username or email, checks a 2-minute rate-limiting
+    cooldown window, and dispatches a fresh email activation token.
+    """
+    clean_val = email_or_username.strip()
+    db = DatabaseManager()
+    
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        
+        # Check by email first, then username
+        cursor.execute("""
+            SELECT id, username, email, name, is_verified, last_verification_sent 
+            FROM users 
+            WHERE email = ? OR username = ?
+        """, (clean_val.lower(), clean_val))
+        row = cursor.fetchone()
+        
+        # Security mitigation: return generic message for nonexistent accounts
+        # to prevent account enumeration/harvesting.
+        if row is None:
+            logger.warning(f"Verification resend requested for nonexistent user: {clean_val}")
+            return True, "If this account is registered and pending activation, a new link has been dispatched."
+            
+        uid, uname, uemail, name, is_verified, last_sent = row
+        
+        if is_verified == 1:
+            return False, "This account has already been verified and activated. Please sign in!"
+            
+        # Check rate-limiting cooldown (2 minutes / 120 seconds)
+        if last_sent is not None:
+            try:
+                last_sent_dt = datetime.fromisoformat(last_sent)
+                elapsed = (datetime.now() - last_sent_dt).total_seconds()
+                cooldown = 120 # 2 minutes in seconds
+                if elapsed < cooldown:
+                    remaining = int(cooldown - elapsed)
+                    logger.warning(f"Verification resend rate-limited for {uname}. Wait {remaining}s.")
+                    return False, f"Please wait {remaining} seconds before requesting another activation link."
+            except Exception as parse_err:
+                logger.error(f"Failed parsing last_verification_sent timestamp: {parse_err}")
+                
+        # Generate fresh token & update sent timestamp
+        new_token = secrets.token_urlsafe(32)
+        new_expiry = (datetime.now() + timedelta(hours=24)).isoformat()
+        current_time = datetime.now().isoformat()
+        
+        cursor.execute("""
+            UPDATE users 
+            SET verification_token = ?, token_expiry = ?, last_verification_sent = ? 
+            WHERE id = ?
+        """, (new_token, new_expiry, current_time, uid))
+        conn.commit()
+        db.log_security_event(uid, "Verification activation link resent", "127.0.0.1")
+        
+        # Build URL dynamically
+        try:
+            base_url = st.secrets.get("smtp", {}).get("base_url", "http://localhost:8501").rstrip("/")
+        except Exception:
+            base_url = "http://localhost:8501"
+            
+        verify_url = f"{base_url}/?verify_token={new_token}"
+        subject = "🌱 Verify Your BOKU SSM-iCrop Account"
+        
+        body_html = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; padding: 20px; line-height: 1.6;">
+            <h2 style="color: #10B981;">SSM-iCrop Account Activation</h2>
+            <p>Hello <strong>{name}</strong>,</p>
+            <p>Here is your new activation link. Please verify your account to unlock all crop growth simulation models.</p>
+            <p style="margin: 30px 0;">
+                <a href="{verify_url}" style="background-color: #10B981; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: bold;">
+                    Activate My Account
+                </a>
+            </p>
+            <p>Or paste this link into your browser:</p>
+            <p><a href="{verify_url}">{verify_url}</a></p>
+            <hr style="border: none; border-top: 1px solid #E5E7EB; margin-top: 30px;">
+            <p style="font-size: 0.8rem; color: #6B7280;">This activation link is valid for 24 hours.</p>
+        </body>
+        </html>
+        """
+        text_fallback = f"Hello {name},\n\nPlease activate your account via this link: {verify_url}"
+        send_system_email(uemail, subject, body_html, text_fallback)
+        
+        return True, "A fresh verification link has been successfully dispatched to your email address."
+
 def request_password_reset(email: str) -> Tuple[bool, str]:
     """
     Locates user by email, generates a time-sensitive 1-hour reset token, 

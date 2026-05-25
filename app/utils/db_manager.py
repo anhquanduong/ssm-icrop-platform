@@ -72,7 +72,8 @@ class DatabaseManager:
                 ("reset_token", "TEXT"),
                 ("token_expiry", "TEXT"),
                 ("login_attempts", "INTEGER DEFAULT 0"),
-                ("lockout_until", "TEXT NULL")
+                ("lockout_until", "TEXT NULL"),
+                ("last_verification_sent", "TEXT NULL")
             ]
             
             for col_name, col_type in migrations:
