@@ -240,7 +240,7 @@ if "reset_token" in query_params:
     new_p = st.text_input("New Secure Password", type="password", key="new_p_reset")
     new_p_c = st.text_input("Confirm New Password", type="password", key="new_p_reset_confirm")
     
-    if st.button("Apply Password Reset", use_container_width=True):
+    if st.button("Apply Password Reset", width='stretch'):
         if new_p != new_p_c:
             st.error("Passwords do not match!")
         else:
@@ -269,7 +269,7 @@ if not st.session_state.logged_in:
         # Get user IP (Mocked for local dashboard)
         ip_addr = "127.0.0.1"
         
-        if st.button("Log In", use_container_width=True):
+        if st.button("Log In", width='stretch'):
             success, msg, payload = authenticate_secure_user(login_user, login_pass, ip_addr)
             if success and payload:
                 st.session_state.logged_in = True
@@ -304,7 +304,7 @@ if not st.session_state.logged_in:
         reg_workplace = st.text_input("Workplace / Institution", key="reg_workplace_field")
         reg_pass = st.text_input("Password (Min 6 chars)", type="password", key="reg_pass_field")
         
-        if st.button("Create Account", use_container_width=True):
+        if st.button("Create Account", width='stretch'):
             success, msg = register_secure_user(reg_user, reg_email, reg_pass, reg_name, reg_workplace)
             if success:
                 st.success(msg)
@@ -323,7 +323,7 @@ if not st.session_state.logged_in:
     with tab_forgot:
         st.subheader("🔑 Request Password Reset Link")
         reset_email = st.text_input("Registered Email Address", key="reset_email_field")
-        if st.button("Request Reset Token", use_container_width=True):
+        if st.button("Request Reset Token", width='stretch'):
             success, msg = request_password_reset(reset_email)
             st.success(msg) # Standard security response
             
@@ -349,7 +349,7 @@ if not st.session_state.logged_in:
             key="resend_identifier_field",
         )
 
-        if st.button("📨 Send New Activation Link", use_container_width=True, key="resend_btn"):
+        if st.button("📨 Send New Activation Link", width='stretch', key="resend_btn"):
             if not resend_identifier.strip():
                 st.warning("Please enter your registered email address or username.")
             else:
@@ -380,7 +380,7 @@ if not st.session_state.logged_in:
 
 # Header details for authenticated users
 st.sidebar.markdown(f"👤 **Account:** `{st.session_state.username}`")
-if st.sidebar.button("🚪 Log Out", use_container_width=True):
+if st.sidebar.button("🚪 Log Out", width='stretch'):
     st.session_state.logged_in = False
     st.session_state.user_id = None
     st.session_state.username = None
@@ -1068,7 +1068,7 @@ with col_left:
             help="Enter a unique tag name to save this simulation run in history."
         )
     with c_btn:
-        run_btn = st.button("🚀 Run SSM-iCrop Simulation", use_container_width=True)
+        run_btn = st.button("🚀 Run SSM-iCrop Simulation", width='stretch')
 
 # ----------------- RIGHT COLUMN: CHARTS & METRICS VIEWPORT -----------------
 with col_right:
@@ -1109,7 +1109,7 @@ with col_right:
                 st.image(
                     "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&w=800&q=80",
                     caption="Click 'Run SSM-iCrop Simulation' to execute BOKU crop physiological model.",
-                    use_container_width=True
+                    width='stretch'
                 )
         else:
             # EXECUTE SIMULATION CYCLE
@@ -1312,7 +1312,7 @@ with col_right:
                         yaxis=dict(gridcolor='#E5E7EB'),
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                     )
-                    st.plotly_chart(fig_biomass, use_container_width=True)
+                    st.plotly_chart(fig_biomass, width='stretch')
                     
                 # 7. Plot Leaf Area Index (LAI) Trajectory
                 with chart2_placeholder.container():
@@ -1331,7 +1331,7 @@ with col_right:
                         xaxis=dict(gridcolor='#E5E7EB'),
                         yaxis=dict(gridcolor='#E5E7EB')
                     )
-                    st.plotly_chart(fig_lai, use_container_width=True)
+                    st.plotly_chart(fig_lai, width='stretch')
                     
                 # 8. Plot Daily Temperature Development Stress Impact Chart
                 with chart3_placeholder.container():
@@ -1359,7 +1359,7 @@ with col_right:
                         xaxis=dict(gridcolor='#E5E7EB'),
                         yaxis=dict(gridcolor='#E5E7EB', range=[-0.05, 1.05])
                     )
-                    st.plotly_chart(fig_temp, use_container_width=True)
+                    st.plotly_chart(fig_temp, width='stretch')
                     
                 # Render physical soil parameter expander
                 with st.expander("🌍 Active Spatial Soil Profile Details", expanded=True):
@@ -1410,7 +1410,7 @@ with col_right:
                     xaxis=dict(gridcolor='#E5E7EB'),
                     yaxis=dict(gridcolor='#E5E7EB')
                 )
-                st.plotly_chart(fig_biomass, use_container_width=True)
+                st.plotly_chart(fig_biomass, width='stretch')
                 
                 # Multi-scenario LAI Comparison Chart
                 st.markdown("##### 🍀 Canopy Leaf Area Index (LAI) Overlay")
@@ -1429,7 +1429,7 @@ with col_right:
                     xaxis=dict(gridcolor='#E5E7EB'),
                     yaxis=dict(gridcolor='#E5E7EB')
                 )
-                st.plotly_chart(fig_lai, use_container_width=True)
+                st.plotly_chart(fig_lai, width='stretch')
             else:
                 st.warning("⚠️ Please select at least one scenario run to build charts.")
                 
@@ -1449,7 +1449,7 @@ with col_right:
                         "Max LAI": f"{df['LAI'].max():.2f}",
                         "Max Biomass (kg/ha)": f"{df['BIOMASS'].max():.0f}"
                     })
-                st.dataframe(pd.DataFrame(summary_data), use_container_width=True)
+                st.dataframe(pd.DataFrame(summary_data), width='stretch')
                 
                 # Dual column button layout
                 col_csv, col_xlsx = st.columns(2)
@@ -1462,7 +1462,7 @@ with col_right:
                         data=csv_data,
                         file_name="ssm_icrop_simulation_export.csv",
                         mime="text/csv",
-                        use_container_width=True
+                        width='stretch'
                     )
                     
                 with col_xlsx:
@@ -1485,11 +1485,11 @@ with col_right:
                         data=xlsx_data,
                         file_name="ssm_icrop_simulation_report.xlsx",
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                        use_container_width=True
+                        width='stretch'
                     )
             
             st.markdown("---")
-            if st.button("🗑️ Clear History Logs", use_container_width=True):
+            if st.button("🗑️ Clear History Logs", width='stretch'):
                 st.session_state["sim_history"] = {}
                 st.toast("🧹 Simulation history cleared successfully!")
                 st.rerun()
