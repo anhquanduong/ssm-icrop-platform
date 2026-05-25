@@ -376,36 +376,51 @@ class TestModularSubmodels(unittest.TestCase):
         depleted_soil = self.soil_config.copy()
         depleted_soil['initial_n'] = 30.0
 
+        # Create rainy weather to trigger active deep drainage leaching
+        rainy_weather = self.weather_df.copy()
+        rainy_weather.loc[rainy_weather['DOY'] == 140, 'RAIN'] = 100.0
+
+        # Enable drainage release schedule on DOY 140
+        water_management_drainage = {
+            'auto_irrigation': True,
+            'irrigation': [],
+            'drainage': [{'start_doy': 140, 'release_rate_mm_day': 30.0, 'infrastructure_type': 'Tile'}]
+        }
+
         # Run 1: Low fertilizer (30 kg N/ha)
         engine_low = SSMiCropEngine(
-            weather_df=self.weather_df,
+            weather_df=rainy_weather,
             latitude=21.0285,
             soil_config=depleted_soil,
-            fertilizer_schedule=[{'doy': 120, 'nitrogen_kg_ha': 30.0}],
-            water_management={'auto_irrigation': True, 'irrigation': [], 'drainage': []},
+            fertilizer_schedule=[{'doy': 130, 'nitrogen_kg_ha': 30.0}],
+            water_management=water_management_drainage,
             mode="Advanced",
             advanced_options={
-                "use_vpd": True,
+                "use_vpd": False,
                 "use_leaching": True,
-                "use_root_growth": True,
-                "use_heat_shock": True
+                "use_root_growth": False,
+                "use_heat_shock": False,
+                "use_moisture": False,
+                "use_nitrogen": True
             }
         )
         df_low = engine_low.run_simulation("Maize")
         
         # Run 2: High fertilizer (200 kg N/ha)
         engine_high = SSMiCropEngine(
-            weather_df=self.weather_df,
+            weather_df=rainy_weather,
             latitude=21.0285,
             soil_config=depleted_soil,
-            fertilizer_schedule=[{'doy': 120, 'nitrogen_kg_ha': 200.0}],
-            water_management={'auto_irrigation': True, 'irrigation': [], 'drainage': []},
+            fertilizer_schedule=[{'doy': 130, 'nitrogen_kg_ha': 200.0}],
+            water_management=water_management_drainage,
             mode="Advanced",
             advanced_options={
-                "use_vpd": True,
+                "use_vpd": False,
                 "use_leaching": True,
-                "use_root_growth": True,
-                "use_heat_shock": True
+                "use_root_growth": False,
+                "use_heat_shock": False,
+                "use_moisture": False,
+                "use_nitrogen": True
             }
         )
         df_high = engine_high.run_simulation("Maize")

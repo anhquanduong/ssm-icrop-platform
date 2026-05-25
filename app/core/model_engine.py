@@ -704,7 +704,7 @@ class SSMiCropEngine:
                         Daily_Crop_Nitrogen_Uptake = SNAVL
                 else:
                     f_nutr = 1.0
-                f_nutr = np.clip(f_nutr, 0.05, 1.0)
+                f_nutr = np.clip(f_nutr, 0.1, 1.0)
                 SNAVL -= Daily_Crop_Nitrogen_Uptake
                 self.current_soil_n = SNAVL
             else:
@@ -849,22 +849,21 @@ class SSMiCropEngine:
                 if self.advanced_options.get("use_leaching", False) and drain > 0.0:
                     # Calculate deep drainage (drain)
                     # Total_Soil_Water_Content is the total water content of the bottom drainage layer (wl[ldrain])
-                    Total_Soil_Water_Content = max(wl[ldrain], 1e-5)
+                    safe_soil_water = max(wl[ldrain], 0.001)
+                    leaching_fraction = drain / safe_soil_water
                     
-                    # Daily leaching fraction based on the ratio of deep drainage (DRAIN) to total soil water content within the layer
-                    leaching_fraction = drain / Total_Soil_Water_Content
-                    
-                    # Limit the fraction to a safe range to ensure mass conservation
-                    leaching_fraction = min(max(leaching_fraction, 0.0), 1.0)
+                    # Clamp the leaching_fraction explicitly so it can never mathematically exceed 100% of the available solution pool (capped at 0.75)
+                    leaching_fraction = max(0.0, min(leaching_fraction, 0.75))
                     
                     # Calculate actual mass leached
-                    leaching_efficiency_coefficient = self.advanced_options.get("leaching_efficiency", 0.8)
-                    N_Leached_Daily = SNAVL * leaching_fraction * leaching_efficiency_coefficient
+                    leaching_efficiency = self.advanced_options.get("leaching_efficiency", 0.8)
+                    N_Leached_Daily = min(SNAVL * leaching_fraction * leaching_efficiency, max(0.0, SNAVL))
                     
                     # Update available soil mineral nitrogen pool
                     SNAVL -= N_Leached_Daily
                 
-                self.current_soil_n = max(0.0, SNAVL)
+                SNAVL = max(0.0, SNAVL)
+                self.current_soil_n = SNAVL
                 
                 # Root depth propagation
                 if self.advanced_options.get("use_root_growth", False):
