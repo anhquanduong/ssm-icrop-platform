@@ -44,8 +44,8 @@ def verify_password(stored_hash: str, password: str) -> bool:
 def send_system_email(to_email: str, subject: str, body_html: str, text_fallback: str) -> bool:
     """
     Sends an email using the SMTP settings declared in Streamlit Secrets Manager.
-    If the mail server is unconfigured, logs details and appends the message payload 
-    to the LOCAL_MAILBOX_SIMULATOR in-memory cache for effortless offline click testing.
+    If the mail server is unconfigured or transmission fails, logs details and 
+    appends the message payload to the LOCAL_MAILBOX_SIMULATOR in-memory cache.
     """
     try:
         smtp_secrets = st.secrets.get("smtp", {})
@@ -58,18 +58,18 @@ def send_system_email(to_email: str, subject: str, body_html: str, text_fallback
     password = smtp_secrets.get("password")
     from_email = smtp_secrets.get("from_email", "no-reply@ssm-icrop.org")
     
-    # Store to local simulator always for local debugging ease
-    LOCAL_MAILBOX_SIMULATOR.append({
-        "to": to_email,
-        "subject": subject,
-        "body_html": body_html,
-        "timestamp": datetime.now().isoformat()
-    })
-    logger.info(f"[Local Mailbox Simulator] Cached email to '{to_email}' with subject '{subject}'")
+    def fallback_to_simulator(reason: str):
+        LOCAL_MAILBOX_SIMULATOR.append({
+            "to": to_email,
+            "subject": subject,
+            "body_html": body_html,
+            "timestamp": datetime.now().isoformat()
+        })
+        logger.info(f"[Local Mailbox Simulator] Cached email due to: {reason}")
 
-    if not host or not user or not password:
-        logger.info("SMTP Credentials missing or incomplete. Redirected email to Local Mailbox Simulator.")
-        return True # Handled cleanly by fallback simulator
+    if os.environ.get("SSM_ICROP_TESTING") == "1" or not host or not user or not password:
+        fallback_to_simulator("SMTP Credentials missing or running in testing environment.")
+        return True
         
     try:
         msg = MIMEMultipart("alternative")
@@ -91,8 +91,9 @@ def send_system_email(to_email: str, subject: str, body_html: str, text_fallback
         logger.info(f"Successfully sent SMTP email to {to_email}")
         return True
     except Exception as smtp_err:
-        logger.error(f"SMTP Server delivery failed ({smtp_err}). Redirected to local debug simulators.")
-        return True # Fallback simulator serves as backup
+        logger.error(f"SMTP Server delivery failed ({smtp_err}). Redirecting to local debug simulator.")
+        fallback_to_simulator(f"SMTP transmission error: {smtp_err}")
+        return True
 
 def register_secure_user(username: str, email: str, password: str, name: str, workplace: str) -> Tuple[bool, str]:
     """

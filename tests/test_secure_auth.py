@@ -1,4 +1,5 @@
 import os
+os.environ["SSM_ICROP_TESTING"] = "1"
 import sys
 import tempfile
 import unittest
