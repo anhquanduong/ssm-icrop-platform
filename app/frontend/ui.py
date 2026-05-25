@@ -55,6 +55,13 @@ from utils.auth_secure import (
 )
 
 # Additional utilities
+def is_smtp_configured() -> bool:
+    try:
+        smtp_secrets = st.secrets.get("smtp", {})
+        return bool(smtp_secrets.get("host") and smtp_secrets.get("user") and smtp_secrets.get("password"))
+    except Exception:
+        return False
+
 from utils.excel_parser import parse_crop_parameters
 from utils.spatial_helper import SpatialSoilEstimator
 from utils.time_slicer import WeatherTimeSlicer
@@ -280,7 +287,7 @@ if not st.session_state.logged_in:
                 st.error(msg)
                 
             # Local debug helper: print simulator emails if login attempts increase
-            if LOCAL_MAILBOX_SIMULATOR:
+            if LOCAL_MAILBOX_SIMULATOR and not is_smtp_configured():
                 with st.expander("📬 Debug Mailbox Simulator (Offline Activation Helper)", expanded=True):
                     st.info("Offline verification links generated in-memory during local review:")
                     for m in LOCAL_MAILBOX_SIMULATOR:
@@ -303,7 +310,7 @@ if not st.session_state.logged_in:
             else:
                 st.error(msg)
                 
-            if LOCAL_MAILBOX_SIMULATOR:
+            if LOCAL_MAILBOX_SIMULATOR and not is_smtp_configured():
                 with st.expander("📬 Debug Mailbox Simulator (Offline Activation Helper)", expanded=True):
                     st.info("Offline verification links generated in-memory during local review:")
                     for m in LOCAL_MAILBOX_SIMULATOR:
@@ -319,7 +326,7 @@ if not st.session_state.logged_in:
             success, msg = request_password_reset(reset_email)
             st.success(msg) # Standard security response
             
-            if LOCAL_MAILBOX_SIMULATOR:
+            if LOCAL_MAILBOX_SIMULATOR and not is_smtp_configured():
                 with st.expander("📬 Debug Mailbox Simulator (Offline Reset Helper)", expanded=True):
                     st.info("Offline reset links generated in-memory during local review:")
                     for m in LOCAL_MAILBOX_SIMULATOR:
@@ -1039,7 +1046,7 @@ with col_right:
             
             # Local debug helper: display mailbox simulator
             my_emails = [m for m in LOCAL_MAILBOX_SIMULATOR if m["to"] == st.session_state.email]
-            if my_emails:
+            if my_emails and not is_smtp_configured():
                 with st.expander("📬 Local Mailbox Simulator (Debug Account Verification)", expanded=True):
                     st.info("Verification emails found in local memory cache:")
                     for m in my_emails:
@@ -1488,7 +1495,7 @@ with col_right:
                         
         # Local debug reset link display for password changes
         my_emails_reset = [m for m in LOCAL_MAILBOX_SIMULATOR if m["to"] == st.session_state.email and "Reset" in m["subject"]]
-        if my_emails_reset:
+        if my_emails_reset and not is_smtp_configured():
             with st.expander("📬 Local Mailbox Simulator (Debug Password Reset)", expanded=True):
                 st.info("Confirmation email links found in local memory cache:")
                 for m in my_emails_reset:
