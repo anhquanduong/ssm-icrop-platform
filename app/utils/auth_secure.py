@@ -145,7 +145,11 @@ def register_secure_user(username: str, email: str, password: str, name: str, wo
             db.log_security_event(new_uid, "Account registered (pending verification)", "127.0.0.1")
             
             # Dispatch verification email
-            verify_url = f"http://localhost:8501/?verify_token={verify_token}"
+            try:
+                base_url = st.secrets.get("smtp", {}).get("base_url", "http://localhost:8501").rstrip("/")
+            except Exception:
+                base_url = "http://localhost:8501"
+            verify_url = f"{base_url}/?verify_token={verify_token}"
             subject = "🌱 Verify Your BOKU SSM-iCrop Account"
             
             body_html = f"""
@@ -319,7 +323,11 @@ def request_password_reset(email: str) -> Tuple[bool, str]:
         conn.commit()
         db.log_security_event(uid, "Password reset token requested", "127.0.0.1")
         
-        reset_url = f"http://localhost:8501/?reset_token={reset_token}"
+        try:
+            base_url = st.secrets.get("smtp", {}).get("base_url", "http://localhost:8501").rstrip("/")
+        except Exception:
+            base_url = "http://localhost:8501"
+        reset_url = f"{base_url}/?reset_token={reset_token}"
         subject = "🔐 SSM-iCrop Password Reset Request"
         body_html = f"""
         <html>
