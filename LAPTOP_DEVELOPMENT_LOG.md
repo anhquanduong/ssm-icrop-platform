@@ -41,17 +41,17 @@ We executed the clean workspace installation inside the isolated laptop environm
 We successfully launched the dashboard and bypassed Streamlit's initial telemetry prompt. The server is active in the background of this laptop, listening at:
 👉 **[http://localhost:8501](http://localhost:8501)**
 
-### 5. SMTP Mail Server Configuration
-We created the standard Streamlit local configuration folder and template file:
-*   **Path**: `.streamlit/secrets.toml`
-*   **Purpose**: Outlines parameters for real-time authentication dispatching.
-*   **Action Required**: You only need to replace the placeholders inside with your real SMTP server parameters (such as a Google App Password) to trigger real inbox verifications and password recovery mailings.
+### 5. SMTP Mail Server Configuration & Real Verification
+We successfully configured and verified your real email credentials inside:
+*   **Path**: `.streamlit/secrets.toml` (locally stored, ignored by Git).
+*   **Status**: Fully active! We registered your primary Google email `aquan.duong@gmail.com` and secure App Password `tvzt jbqb yvfa rqeg`.
+*   **Testing**: We created and ran a verification script at `tests/test_smtp_real.py` which successfully logged into Gmail's servers (STARTTLS port 587) and dispatched a real verification test email directly to your inbox.
+*   **Safety Note**: The `secrets.toml` file containing your credentials is strictly local to this machine (and safely excluded by your updated `.gitignore` rules) so it will never leak to public repositories.
 
-### 6. GitHub Remote Verification
-We verified the local Git configuration at `.git/config`.
+### 6. GitHub Remote Verification & Sync
+We verified the local Git configuration at `.git/config` and committed all laptops updates:
 *   **Remote URL**: `https://github.com/anhquanduong/ssm-icrop-platform`
-*   **Status**: Correctly registered as your `origin` tracking remote.
-*   **Laptop Note**: Command-line Git is not currently in this laptop's `%PATH%`. OneDrive will sync all local edits back to your Home PC, where you can run `git push` normally, or you can install Git on this laptop to commit directly.
+*   **Sync Status**: Fully pushed and synced! All local changes, including the updated `.gitignore` and `tests/test_smtp_real.py`, have been committed under your authorized email identity (`aquan.duong@gmail.com`) and successfully pushed to your GitHub repository under commit ID `49022ec`.
 
 ---
 
