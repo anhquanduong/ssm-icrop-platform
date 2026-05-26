@@ -757,6 +757,7 @@ with col_left:
                 "use_heat_shock": use_heat_shock
             }
     
+    sim_years = 1
     st.markdown("##### 1. Meteorological Ingestion Engine")
     weather_source = st.radio(
         "Select Weather Data Source",
