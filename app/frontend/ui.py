@@ -492,6 +492,11 @@ with st.sidebar:
             new_tbd = st.number_input("Base Temperature (TBD - °C)", value=8.0, step=0.5)
             new_rue = st.number_input("Max Radiation Use Efficiency (RUEmax - g/MJ)", value=1.6, step=0.1, min_value=0.5, max_value=3.5)
             new_sla = st.number_input("Specific Leaf Area (SLA - m²/g)", value=0.022, format="%.4f", step=0.001)
+            crop_produce_type = st.selectbox(
+                "🌾 Primary Harvested Organ (Production Type):",
+                options=["Fruit/Seed", "Tuber/Root", "Vegetative Foliage"],
+                help="Select what component of the biomass constitutes the economic yield for this crop species."
+            )
             new_privacy = st.radio("Privacy Status", ["🔒 Private (Me Only)", "🌐 Public (Share with all users)"])
             
             submit_btn = st.form_submit_button("Save and Register Crop Profile")
@@ -513,6 +518,7 @@ with st.sidebar:
                         new_params["RUE_MAX"] = new_rue
                         new_params["IRUE"] = new_rue
                         new_params["SLA"] = new_sla
+                        new_params["crop_produce_type"] = crop_produce_type
                         
                         is_public_flag = 1 if "Public" in new_privacy else 0
                         
@@ -1513,6 +1519,37 @@ with col_right:
                 
                 # Pull the unredacted daily dataframe slice from memory
                 inspect_df = st.session_state["detailed_scenarios"][selected_inspect_run]
+                
+                # Retrieve metadata from the current crop profile row
+                active_produce_type = inspect_df["crop_produce_type"].iloc[0] if "crop_produce_type" in inspect_df.columns else "Fruit/Seed"
+                
+                # Determine label naming variables dynamically
+                if active_produce_type == "Tuber/Root":
+                    yield_label = "🍠 Final Tuber/Root Yield"
+                    yield_column = "WROOT"  # Map to structural root/tuber pool variable
+                elif active_produce_type == "Vegetative Foliage":
+                    yield_label = "🥬 Final Foliage/Leaf Yield"
+                    yield_column = "WLF"    # Map directly to accumulated green leaf mass pool
+                else:
+                    yield_label = "🌾 Final Grain/Fruit/Seed Yield"
+                    yield_column = "WGRN"   # Default standard grain seed storage pool
+                
+                # Dynamic Metric KPI Card Rendering
+                final_yield_raw = inspect_df.iloc[-1].get(yield_column, 0.0)
+                final_biomass_raw = inspect_df.iloc[-1].get("WTOP", 0.0)
+                
+                # Normalization scaling conversion to Ton/ha
+                yield_ton = final_yield_raw / 100.0 if final_yield_raw > 100 else final_yield_raw
+                biomass_ton = final_biomass_raw / 100.0 if final_biomass_raw > 100 else final_biomass_raw
+                
+                m_col1, m_col2, m_col3 = st.columns(3)
+                with m_col1:
+                    st.metric(label=yield_label, value=f"{yield_ton:.2f} Ton/ha")
+                with m_col2:
+                    st.metric(label="🌿 Total Above-Ground Biomass", value=f"{biomass_ton:.2f} Ton/ha")
+                with m_col3:
+                    max_lai = inspect_df["LAI"].max() if "LAI" in inspect_df.columns else 0.0
+                    st.metric(label="🍀 Peak Leaf Area Index (LAI)", value=f"{max_lai:.2f}")
                 
                 # Provide a clean CSV download button for academic reporting or Excel extraction
                 st.download_button(

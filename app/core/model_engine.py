@@ -7,6 +7,7 @@ DEFAULT_CROP_PARAMETERS = {
     "Maize": {
         "CROP": "Maize",
         "Cultivar": "B73*MO17 (SC704)",
+        "crop_produce_type": "Fruit/Seed",
         # Phenology (GDD / GDD equivalents)
         "TBD": 8.0,            # Base temperature for phenology (°C)
         "TP1D": 34.0,          # Lower optimum temperature for phenology (°C)
@@ -63,6 +64,7 @@ DEFAULT_CROP_PARAMETERS = {
     "Sorghum": {
         "CROP": "Sorghum",
         "Cultivar": "M-35-1",
+        "crop_produce_type": "Fruit/Seed",
         # Phenology (GDD / GDD equivalents)
         "TBD": 8.0,
         "TP1D": 34.0,
@@ -1037,7 +1039,12 @@ class SSMiCropEngine:
                 deport += grtd
                 
             # Save daily record
+            active_produce_type = cp.get("crop_produce_type", "Fruit/Seed")
+            wroot = wgrn if active_produce_type == "Tuber/Root" else (wtop * 0.2)
+            
             sim_data.append({
+                "crop_produce_type": active_produce_type,
+                "WROOT": round(wroot, 2),
                 "DAP": dap,
                 "DOY": doy,
                 "TMP": round(tmp, 2),
