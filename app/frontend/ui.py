@@ -1374,6 +1374,29 @@ with col_right:
                     )
                     st.plotly_chart(fig_temp, width='stretch')
                     
+                # Render Troubleshooting/Diagnostic logs
+                simulation_results = results_df
+                if st.checkbox("🔍 Activate Deep Backend Engineering Diagnostic Logs"):
+                    st.subheader("Daily Nitrogen & Leaching State Matrix")
+                    st.markdown(
+                        """
+                        This live diagnostic viewer exposes internal, daily-resolution biophysical state variables 
+                        directly from the core simulation engine loop. Use this matrix to trace Nitrogen availability, 
+                        drainage events, and nitrogen leaching mass dynamics day-by-day.
+                        """
+                    )
+                    st.dataframe(
+                        simulation_results["diagnostic_df"],
+                        use_container_width=True,
+                        column_config={
+                            "DAP": st.column_config.NumberColumn("DAP", help="Days After Planting"),
+                            "DRAIN": st.column_config.NumberColumn("Drainage (mm)", help="Daily Drainage volume"),
+                            "SNAVL": st.column_config.NumberColumn("Soil N Pool (kg N/ha)", help="Available Soil Nitrogen pool"),
+                            "NLEACH": st.column_config.NumberColumn("N Leached (kg N/ha)", help="Daily Nitrogen Leached mass"),
+                            "NST": st.column_config.NumberColumn("N Stress Factor", help="Final Nitrogen Stress Factor (0=Extreme stress, 1=Optimal)")
+                        }
+                    )
+                    
                 # Render physical soil parameter expander
                 with st.expander("🌍 Active Spatial Soil Profile Details", expanded=True):
                     s_col1, s_col2, s_col3 = st.columns(3)

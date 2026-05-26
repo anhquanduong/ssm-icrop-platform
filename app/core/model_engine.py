@@ -124,6 +124,19 @@ DEFAULT_CROP_PARAMETERS = {
 }
 
 
+class SimulationResultDataFrame(pd.DataFrame):
+    _metadata = ["diagnostic_df"]
+
+    @property
+    def _constructor(self):
+        return SimulationResultDataFrame
+
+    def __getitem__(self, key):
+        if key == "diagnostic_df":
+            return getattr(self, "diagnostic_df", None)
+        return super().__getitem__(key)
+
+
 class SSMiCropEngine:
     """
     Production-grade object-oriented simulation engine translating the BOKU Simple Simulation Model (SSM-iCrop)
@@ -473,6 +486,7 @@ class SSMiCropEngine:
         
         # Result containers
         sim_data = []
+        diagnostic_rows = []
         
         cum_dtu_emergence = 0.0
         pollen_sterility = 0.0
@@ -502,6 +516,7 @@ class SSMiCropEngine:
             # Initialize Nitrogen variables for the day
             SNAVL = self.current_soil_n
             Daily_Crop_Nitrogen_Uptake = 0.0
+            N_Leached_Daily = 0.0
             
             if self.mode == "Advanced":
                 # --- 2. THE DAILY SOIL WATER BALANCE LOOP ---
@@ -1059,4 +1074,14 @@ class SSMiCropEngine:
                 "Model_Fidelity": self.mode
             })
             
-        return pd.DataFrame(sim_data)
+            diagnostic_rows.append({
+                "DAP": dap,
+                "DRAIN": round(drain, 4),
+                "SNAVL": round(SNAVL, 4),
+                "NLEACH": round(N_Leached_Daily, 4),
+                "NST": round(f_nutr, 3)
+            })
+            
+        df = SimulationResultDataFrame(sim_data)
+        df.diagnostic_df = pd.DataFrame(diagnostic_rows)
+        return df

@@ -4,22 +4,79 @@ rem This prevents path corruption and sync conflicts across shared OneDrive work
 set VENV_DIR=env_%COMPUTERNAME%
 
 rem Dynamic Python Path Resolution
+set PYTHON_CMD=
+
+rem 1. Check if global python is functional and not a dummy Microsoft Store execution alias (ignoring WindowsApps)
 where python >nul 2>nul
 if %errorlevel% equ 0 (
-    set PYTHON_CMD=python
-    goto :PYTHON_FOUND
+    for /f "tokens=*" %%i in ('where python 2^>nul') do (
+        echo %%i | findstr /i "WindowsApps" >nul
+        if errorlevel 1 (
+            set PYTHON_CMD="%%i"
+            goto :PYTHON_FOUND
+        )
+    )
 )
 
+rem 2. Check for local uv-managed Python interpreters dynamically
+if exist "C:\Users\%USERNAME%\AppData\Roaming\uv\python" (
+    for /d %%d in ("C:\Users\%USERNAME%\AppData\Roaming\uv\python\*") do (
+        if exist "%%d\python.exe" (
+            echo uv-managed Python installation detected: %%d\python.exe
+            set PYTHON_CMD="%%d\python.exe"
+            goto :PYTHON_FOUND
+        )
+    )
+)
+
+rem 3. Check for standard local user Python installations dynamically
+if exist "C:\Users\%USERNAME%\AppData\Local\Programs\Python" (
+    for /d %%d in ("C:\Users\%USERNAME%\AppData\Local\Programs\Python\*") do (
+        if exist "%%d\python.exe" (
+            echo User-profile Python installation detected: %%d\python.exe
+            set PYTHON_CMD="%%d\python.exe"
+            goto :PYTHON_FOUND
+        )
+    )
+)
+
+rem 4. Check for standard Anaconda system paths
 if exist "C:\ProgramData\anaconda3\python.exe" (
-    echo Anaconda Python installation detected. Routing initialization...
+    echo System Anaconda Python installation detected: C:\ProgramData\anaconda3\python.exe
     set PYTHON_CMD="C:\ProgramData\anaconda3\python.exe"
     goto :PYTHON_FOUND
 )
-
-if exist "C:\Program Files\QGIS 3.34.14\apps\Python312\python.exe" (
-    echo QGIS Python installation detected. Routing initialization...
-    set PYTHON_CMD="C:\Program Files\QGIS 3.34.14\apps\Python312\python.exe"
+if exist "C:\Users\%USERNAME%\anaconda3\python.exe" (
+    echo User Anaconda Python installation detected: C:\Users\%USERNAME%\anaconda3\python.exe
+    set PYTHON_CMD="C:\Users\%USERNAME%\anaconda3\python.exe"
     goto :PYTHON_FOUND
+)
+
+rem 5. Check for standard system Program Files Python installations dynamically
+if exist "C:\Program Files\Python" (
+    for /d %%d in ("C:\Program Files\Python\*") do (
+        if exist "%%d\python.exe" (
+            echo System Python installation detected: %%d\python.exe
+            set PYTHON_CMD="%%d\python.exe"
+            goto :PYTHON_FOUND
+        )
+    )
+)
+
+rem 6. Check for standard QGIS apps backup paths dynamically
+if exist "C:\Program Files\QGIS" (
+    for /d %%d in ("C:\Program Files\QGIS\*") do (
+        if exist "%%d\apps\Python312\python.exe" (
+            echo QGIS Python installation detected: %%d\apps\Python312\python.exe
+            set PYTHON_CMD="%%d\apps\Python312\python.exe"
+            goto :PYTHON_FOUND
+        )
+        if exist "%%d\apps\Python311\python.exe" (
+            echo QGIS Python installation detected: %%d\apps\Python311\python.exe
+            set PYTHON_CMD="%%d\apps\Python311\python.exe"
+            goto :PYTHON_FOUND
+        )
+    )
 )
 
 echo Error: Python was not found on your system PATH or in standard paths.
