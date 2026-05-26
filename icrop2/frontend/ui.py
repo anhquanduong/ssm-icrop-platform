@@ -184,61 +184,61 @@ def map_soil_profile_to_params(profile: dict) -> dict:
     }
 
 # ----------------- SESSION STATE & SECURITY INITIALIZATION -----------------
-if "logged_in" not in st.session_state:
+if "icrop2_logged_in" not in st.session_state:
     st.session_state.icrop2_logged_in = False
-if "user_id" not in st.session_state:
+if "icrop2_user_id" not in st.session_state:
     st.session_state.icrop2_user_id = None
-if "username" not in st.session_state:
+if "icrop2_username" not in st.session_state:
     st.session_state.icrop2_username = None
-if "email" not in st.session_state:
+if "icrop2_email" not in st.session_state:
     st.session_state.icrop2_email = None
-if "name" not in st.session_state:
+if "icrop2_name" not in st.session_state:
     st.session_state.icrop2_name = None
-if "workplace" not in st.session_state:
+if "icrop2_workplace" not in st.session_state:
     st.session_state.icrop2_workplace = None
-if "is_verified" not in st.session_state:
+if "icrop2_is_verified" not in st.session_state:
     st.session_state.icrop2_is_verified = 0
-if "session_token" not in st.session_state:
+if "icrop2_session_token" not in st.session_state:
     st.session_state.icrop2_session_token = None
-if "session_key" not in st.session_state:
+if "icrop2_session_key" not in st.session_state:
     st.session_state.icrop2_session_key = None
-if "async_runner" not in st.session_state:
+if "icrop2_async_runner" not in st.session_state:
     st.session_state.icrop2_async_runner = AsyncSimulationRunner()
-if "lat_key" not in st.session_state:
+if "icrop2_lat_key" not in st.session_state:
     st.session_state["icrop2_lat_key"] = 21.0285
-if "lon_key" not in st.session_state:
+if "icrop2_lon_key" not in st.session_state:
     st.session_state["icrop2_lon_key"] = 105.8542
-if "current_preset" not in st.session_state:
+if "icrop2_current_preset" not in st.session_state:
     st.session_state.icrop2_current_preset = "Custom Coordinates"
-if "fertilizer_rounds" not in st.session_state:
+if "icrop2_fertilizer_rounds" not in st.session_state:
     st.session_state.icrop2_fertilizer_rounds = []
-if "irrigation_rounds" not in st.session_state:
+if "icrop2_irrigation_rounds" not in st.session_state:
     st.session_state.icrop2_irrigation_rounds = []
-if "drainage_rounds" not in st.session_state:
+if "icrop2_drainage_rounds" not in st.session_state:
     st.session_state.icrop2_drainage_rounds = []
-if "som_key" not in st.session_state:
+if "icrop2_som_key" not in st.session_state:
     st.session_state["icrop2_som_key"] = 2.5
-if "pawc_key" not in st.session_state:
+if "icrop2_pawc_key" not in st.session_state:
     st.session_state["icrop2_pawc_key"] = 150.0
-if "depth_key" not in st.session_state:
+if "icrop2_depth_key" not in st.session_state:
     st.session_state["icrop2_depth_key"] = 1200
-if "initial_water_key" not in st.session_state:
+if "icrop2_initial_water_key" not in st.session_state:
     st.session_state["icrop2_initial_water_key"] = 25.0
-if "sim_history" not in st.session_state:
+if "icrop2_sim_history" not in st.session_state:
     st.session_state["icrop2_sim_history"] = {}
-if "detailed_scenarios" not in st.session_state:
+if "icrop2_detailed_scenarios" not in st.session_state:
     st.session_state["icrop2_detailed_scenarios"] = {}
-if "simulation_run_active" not in st.session_state:
+if "icrop2_simulation_run_active" not in st.session_state:
     st.session_state.icrop2_simulation_run_active = False
-if "last_results_df" not in st.session_state:
+if "icrop2_last_results_df" not in st.session_state:
     st.session_state.icrop2_last_results_df = None
-if "last_engine_instance" not in st.session_state:
+if "icrop2_last_engine_instance" not in st.session_state:
     st.session_state.icrop2_last_engine_instance = None
-if "last_active_profile" not in st.session_state:
+if "icrop2_last_active_profile" not in st.session_state:
     st.session_state.icrop2_last_active_profile = None
-if "last_soil_profile" not in st.session_state:
+if "icrop2_last_soil_profile" not in st.session_state:
     st.session_state.icrop2_last_soil_profile = None
-if "last_weather_status_msg" not in st.session_state:
+if "icrop2_last_weather_status_msg" not in st.session_state:
     st.session_state.icrop2_last_weather_status_msg = ""
 
 # Intercept and process browser query parameters for activation and resets
@@ -472,7 +472,7 @@ with st.sidebar:
     profile_options.insert(0, "➕ Create New Crop Profile...")
     
     # Manage session state selection to prevent resets
-    if "selected_crop_profile" not in st.session_state:
+    if "icrop2_selected_crop_profile" not in st.session_state:
         st.session_state["icrop2_selected_crop_profile"] = "Default: Maize (BOKU)"
         
     if st.session_state["icrop2_selected_crop_profile"] not in profile_options:
@@ -903,9 +903,9 @@ with col_left:
         st.markdown("##### 2. Interactive Map (Click to Select Coordinates)")
         
         # 1. WIDGET KEY STATE SEEDING
-        if "lat_key" not in st.session_state:
+        if "icrop2_lat_key" not in st.session_state:
             st.session_state["icrop2_lat_key"] = 21.0285  # Default Lat
-        if "lon_key" not in st.session_state:
+        if "icrop2_lon_key" not in st.session_state:
             st.session_state["icrop2_lon_key"] = 105.8542 # Default Lon
             
         # 2. DECOUPLED FOLIUM ENGINE RENDERING
@@ -1452,7 +1452,7 @@ with col_right:
                         try:
                             compiled_df = format_simulation_run(results_df, scenario_name)
                             st.session_state["icrop2_sim_history"][scenario_name] = compiled_df
-                            if "detailed_scenarios" not in st.session_state:
+                            if "icrop2_detailed_scenarios" not in st.session_state:
                                 st.session_state["icrop2_detailed_scenarios"] = {}
                             st.session_state["icrop2_detailed_scenarios"][scenario_name] = results_df.copy()
                             logger.info(f"Scenario '{scenario_name}' logged in simulation ledger.")
