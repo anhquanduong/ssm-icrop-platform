@@ -219,6 +219,18 @@ if "initial_water_key" not in st.session_state:
     st.session_state["initial_water_key"] = 25.0
 if "sim_history" not in st.session_state:
     st.session_state["sim_history"] = {}
+if "simulation_run_active" not in st.session_state:
+    st.session_state.simulation_run_active = False
+if "last_results_df" not in st.session_state:
+    st.session_state.last_results_df = None
+if "last_engine_instance" not in st.session_state:
+    st.session_state.last_engine_instance = None
+if "last_active_profile" not in st.session_state:
+    st.session_state.last_active_profile = None
+if "last_soil_profile" not in st.session_state:
+    st.session_state.last_soil_profile = None
+if "last_weather_status_msg" not in st.session_state:
+    st.session_state.last_weather_status_msg = ""
 
 # Intercept and process browser query parameters for activation and resets
 query_params = st.query_params
@@ -1110,7 +1122,7 @@ with col_right:
             st.stop()
         
         # Initial Landing Page wireframe
-        if not run_btn:
+        if not run_btn and not st.session_state.simulation_run_active:
             with metrics_placeholder.container():
                 m1, m2, m3 = st.columns(3)
                 m1.markdown('<div class="metric-card"><div class="metric-label">Max LAI</div><div class="metric-value">-</div></div>', unsafe_allow_html=True)
@@ -1124,171 +1136,184 @@ with col_right:
                     width='stretch'
                 )
         else:
-            # EXECUTE SIMULATION CYCLE
+            # EXECUTE SIMULATION CYCLE OR RESTORE FROM SESSION STATE
             try:
-                # Compile unified agricultural management payload
-                # Use session state fallbacks in case widgets weren't explicitly rendered
-                soil_config = {
-                    "depth_mm": st.session_state.get("depth_key", 1200),
-                    "initial_water_percent": st.session_state.get("initial_water_key", 25.0),
-                    "pawc_mm_m": st.session_state.get("pawc_key", 150.0),
-                    "som_percent": st.session_state.get("som_key", 2.5)
-                }
-                
-                fertilizer_schedule = [
-                    {
-                        "doy": int(item["doy"]),
-                        "nitrogen_kg_ha": float(item["n"]),
-                        "phosphorus_kg_ha": float(item["p"]),
-                        "potassium_kg_ha": float(item["k"]),
-                        "method": item["method"]
+                if run_btn:
+                    # Compile unified agricultural management payload
+                    # Use session state fallbacks in case widgets weren't explicitly rendered
+                    soil_config = {
+                        "depth_mm": st.session_state.get("depth_key", 1200),
+                        "initial_water_percent": st.session_state.get("initial_water_key", 25.0),
+                        "pawc_mm_m": st.session_state.get("pawc_key", 150.0),
+                        "som_percent": st.session_state.get("som_key", 2.5)
                     }
-                    for item in st.session_state.fertilizer_rounds
-                ]
-                
-                water_management = {
-                    "auto_irrigation": "Automatic" in st.session_state.get("auto_irrigation_key", "Rainfed / Manual Scheduler"),
-                    "irrigation": [
+                    
+                    fertilizer_schedule = [
                         {
                             "doy": int(item["doy"]),
-                            "water_applied_mm": float(item["amount"]),
-                            "system_type": item["type"]
+                            "nitrogen_kg_ha": float(item["n"]),
+                            "phosphorus_kg_ha": float(item["p"]),
+                            "potassium_kg_ha": float(item["k"]),
+                            "method": item["method"]
                         }
-                        for item in st.session_state.irrigation_rounds
-                    ],
-                    "drainage": [
-                        {
-                            "start_doy": int(item["doy"]),
-                            "release_rate_mm_day": float(item["rate"]),
-                            "infrastructure_type": item["type"]
-                        }
-                        for item in st.session_state.drainage_rounds
+                        for item in st.session_state.fertilizer_rounds
                     ]
-                }
-                
-                # Combine into unified package
-                management_payload = {
-                    "soil": soil_config,
-                    "fertilizer": fertilizer_schedule,
-                    "water": water_management
-                }
-                
-                # Print unified payload to terminal/logs for auditing
-                logger.info(f"Unified agricultural management payload compiled: {json.dumps(management_payload, indent=2)}")
-
-                # Resolve effective coordinates cleanly across both routes
-                # lat/lon are only defined in system weather path; use session state as fallback
-                _lat_fallback = st.session_state.get("lat_key", 21.0285)
-                _lon_fallback = st.session_state.get("lon_key", 105.8542)
-                if "🌐 Use System Weather" in weather_source:
-                    effective_lat = st.session_state.get("lat_key", _lat_fallback)
-                    effective_lon = st.session_state.get("lon_key", _lon_fallback)
-                else:
-                    effective_lat = uploaded_lat if uploaded_lat is not None else default_lat
-                    effective_lon = uploaded_lon if uploaded_lon is not None else default_lon
-                
-                # 1. Resolve Weather data frame
-                if "📁 Upload My Own Weather" in weather_source:
-                    if weather_df is None:
-                        raise ValueError("Please upload an SSM Weather File first.")
-                    weather_status_msg = "Successfully loaded weather matrix from custom uploaded SSM workbook."
-                else:
-                    # Option 1: fetch from Open-Meteo API
-                    # 3. TIMEFRAME VALIDATION LOGIC
-                    if (end_date - start_date).days > 3 * 365:
-                        st.error("❌ Selected date range exceeds the maximum limit of 3 years. Please choose a shorter timeframe.")
-                        st.stop()
-                    if end_date > datetime.date.today():
-                        st.warning("⚠️ You selected a date range in the future. Open-Meteo historical climate reanalysis data might not yet exist for future dates.")
-                        
-                    status_placeholder.warning("⏳ Accessing Open-Meteo API for real-time historical daily data...")
-                    start_str = start_date.strftime("%Y-%m-%d")
-                    end_str = end_date.strftime("%Y-%m-%d")
                     
-                    try:
-                        weather_df = fetch_openmeteo_weather(effective_lat, effective_lon, start_str, end_str)
+                    water_management = {
+                        "auto_irrigation": "Automatic" in st.session_state.get("auto_irrigation_key", "Rainfed / Manual Scheduler"),
+                        "irrigation": [
+                            {
+                                "doy": int(item["doy"]),
+                                "water_applied_mm": float(item["amount"]),
+                                "system_type": item["type"]
+                            }
+                            for item in st.session_state.irrigation_rounds
+                        ],
+                        "drainage": [
+                            {
+                                "start_doy": int(item["doy"]),
+                                "release_rate_mm_day": float(item["rate"]),
+                                "infrastructure_type": item["type"]
+                            }
+                            for item in st.session_state.drainage_rounds
+                        ]
+                    }
+                    
+                    # Combine into unified package
+                    management_payload = {
+                        "soil": soil_config,
+                        "fertilizer": fertilizer_schedule,
+                        "water": water_management
+                    }
+                    
+                    # Print unified payload to terminal/logs for auditing
+                    logger.info(f"Unified agricultural management payload compiled: {json.dumps(management_payload, indent=2)}")
+
+                    # Resolve effective coordinates cleanly across both routes
+                    # lat/lon are only defined in system weather path; use session state as fallback
+                    _lat_fallback = st.session_state.get("lat_key", 21.0285)
+                    _lon_fallback = st.session_state.get("lon_key", 105.8542)
+                    if "🌐 Use System Weather" in weather_source:
+                        effective_lat = st.session_state.get("lat_key", _lat_fallback)
+                        effective_lon = st.session_state.get("lon_key", _lon_fallback)
+                    else:
+                        effective_lat = uploaded_lat if uploaded_lat is not None else default_lat
+                        effective_lon = uploaded_lon if uploaded_lon is not None else default_lon
+                    
+                    # 1. Resolve Weather data frame
+                    if "📁 Upload My Own Weather" in weather_source:
                         if weather_df is None:
-                            raise ConnectionError("Network connection timeout or failure after progressive retries.")
-                        weather_status_msg = "Successfully ingested Open-Meteo meteorological data."
-                    except Exception as w_err:
-                        st.warning(f"⚠️ Weather Ingestion API query failed ({w_err}). Falling back to standard climatological baseline.")
-                        weather_df = get_fallback_weather(start_str, end_str)
-                        weather_status_msg = "Reverted to standard climatological weather baseline."
-                
-                # 2. Extract Soil profile and map it using effective coordinates
-                status_placeholder.warning("🌍 Performing spatial soil mapping via cloud API databases...")
-                estimator = SpatialSoilEstimator(use_gee=False)
-                soil_profile = estimator.get_soil_profile(effective_lat, effective_lon)
-                soil_params = map_soil_profile_to_params(soil_profile)
-                
-                # 3. Update the global crop parameter matrix in-memory so the computational loop runs custom parameters
-                DEFAULT_CROP_PARAMETERS[crop_type].update(active_profile)
-                
-                status_placeholder.warning("⚙️ Ingesting weather and soil vectors into SSM-iCrop dynamic growth loop...")
-                
-                # 4. Instantiate & Execute simulation engine asynchronously
-                status_placeholder.warning("⚙️ Preparing background execution container...")
-                
-                # First slice the crop season weather using WeatherTimeSlicer
-                sliced_weather = WeatherTimeSlicer.slice_crop_season(
-                    weather_df=weather_df,
-                    target_year=target_year,
-                    sowing_doy=sowing_doy,
-                    simulation_duration=150
-                )
-                
-                if sliced_weather.empty:
-                    raise ValueError(f"No weather records available in sliced window starting at DOY {sowing_doy} in {target_year}.")
-                    
-                engine_instance = SSMiCropEngine(
-                    weather_df=sliced_weather, 
-                    latitude=effective_lat, 
-                    soil_params=soil_params,
-                    soil_config=soil_config,
-                    fertilizer_schedule=fertilizer_schedule,
-                    water_management=water_management,
-                    mode=engine_mode,
-                    advanced_options=advanced_options
-                )
-                
-                # Dispatch the simulation asynchronously to performance thread pool
-                runner = st.session_state.async_runner
-                tracker = runner.execute_async_simulation(
-                    engine_instance=engine_instance,
-                    crop_type=crop_type,
-                    pden=8.0,
-                    vpdf=1.0
-                )
-                
-                # Render lightweight non-blocking UI visual feedback progress bar and spinner
-                progress_bar = st.progress(0)
-                spinner = st.spinner("Processing agricultural simulation formulas safely on the server...")
-                
-                # Dynamically poll background worker progress state smoothly
-                with spinner:
-                    while not tracker.completed:
-                        state = tracker.get_state()
-                        progress_val = int(state["progress"])
-                        progress_bar.progress(progress_val)
-                        time.sleep(0.02) # Polling rate check
+                            raise ValueError("Please upload an SSM Weather File first.")
+                        weather_status_msg = "Successfully loaded weather matrix from custom uploaded SSM workbook."
+                    else:
+                        # Option 1: fetch from Open-Meteo API
+                        # 3. TIMEFRAME VALIDATION LOGIC
+                        if (end_date - start_date).days > 3 * 365:
+                            st.error("❌ Selected date range exceeds the maximum limit of 3 years. Please choose a shorter timeframe.")
+                            st.stop()
+                        if end_date > datetime.date.today():
+                            st.warning("⚠️ You selected a date range in the future. Open-Meteo historical climate reanalysis data might not yet exist for future dates.")
+                            
+                        status_placeholder.warning("⏳ Accessing Open-Meteo API for real-time historical daily data...")
+                        start_str = start_date.strftime("%Y-%m-%d")
+                        end_str = end_date.strftime("%Y-%m-%d")
                         
-                    # Final state check
-                    final_state = tracker.get_state()
-                    if final_state["error"]:
-                        raise RuntimeError(final_state["error"])
-                        
-                    results_df = tracker.result
+                        try:
+                            weather_df = fetch_openmeteo_weather(effective_lat, effective_lon, start_str, end_str)
+                            if weather_df is None:
+                                raise ConnectionError("Network connection timeout or failure after progressive retries.")
+                            weather_status_msg = "Successfully ingested Open-Meteo meteorological data."
+                        except Exception as w_err:
+                            st.warning(f"⚠️ Weather Ingestion API query failed ({w_err}). Falling back to standard climatological baseline.")
+                            weather_df = get_fallback_weather(start_str, end_str)
+                            weather_status_msg = "Reverted to standard climatological weather baseline."
                     
-                    # Log run in simulation history ledger
-                    try:
-                        compiled_df = format_simulation_run(results_df, scenario_name)
-                        st.session_state["sim_history"][scenario_name] = compiled_df
-                        logger.info(f"Scenario '{scenario_name}' logged in simulation ledger.")
-                    except Exception as hist_err:
-                        logger.warning(f"Failed to log run to history: {hist_err}")
+                    # 2. Extract Soil profile and map it using effective coordinates
+                    status_placeholder.warning("🌍 Performing spatial soil mapping via cloud API databases...")
+                    estimator = SpatialSoilEstimator(use_gee=False)
+                    soil_profile = estimator.get_soil_profile(effective_lat, effective_lon)
+                    soil_params = map_soil_profile_to_params(soil_profile)
+                    
+                    # 3. Update the global crop parameter matrix in-memory so the computational loop runs custom parameters
+                    DEFAULT_CROP_PARAMETERS[crop_type].update(active_profile)
+                    
+                    status_placeholder.warning("⚙️ Ingesting weather and soil vectors into SSM-iCrop dynamic growth loop...")
+                    
+                    # 4. Instantiate & Execute simulation engine asynchronously
+                    status_placeholder.warning("⚙️ Preparing background execution container...")
+                    
+                    # First slice the crop season weather using WeatherTimeSlicer
+                    sliced_weather = WeatherTimeSlicer.slice_crop_season(
+                        weather_df=weather_df,
+                        target_year=target_year,
+                        sowing_doy=sowing_doy,
+                        simulation_duration=150
+                    )
+                    
+                    if sliced_weather.empty:
+                        raise ValueError(f"No weather records available in sliced window starting at DOY {sowing_doy} in {target_year}.")
+                        
+                    engine_instance = SSMiCropEngine(
+                        weather_df=sliced_weather, 
+                        latitude=effective_lat, 
+                        soil_params=soil_params,
+                        soil_config=soil_config,
+                        fertilizer_schedule=fertilizer_schedule,
+                        water_management=water_management,
+                        mode=engine_mode,
+                        advanced_options=advanced_options
+                    )
+                    
+                    # Dispatch the simulation asynchronously to performance thread pool
+                    runner = st.session_state.async_runner
+                    tracker = runner.execute_async_simulation(
+                        engine_instance=engine_instance,
+                        crop_type=crop_type,
+                        pden=8.0,
+                        vpdf=1.0
+                    )
+                    
+                    # Render lightweight non-blocking UI visual feedback progress bar and spinner
+                    progress_bar = st.progress(0)
+                    spinner = st.spinner("Processing agricultural simulation formulas safely on the server...")
+                    
+                    # Dynamically poll background worker progress state smoothly
+                    with spinner:
+                        while not tracker.completed:
+                            state = tracker.get_state()
+                            progress_val = int(state["progress"])
+                            progress_bar.progress(progress_val)
+                            time.sleep(0.02) # Polling rate check
+                            
+                        # Final state check
+                        final_state = tracker.get_state()
+                        if final_state["error"]:
+                            raise RuntimeError(final_state["error"])
+                            
+                        results_df = tracker.result
+                        
+                        # Log run in simulation history ledger
+                        try:
+                            compiled_df = format_simulation_run(results_df, scenario_name)
+                            st.session_state["sim_history"][scenario_name] = compiled_df
+                            logger.info(f"Scenario '{scenario_name}' logged in simulation ledger.")
+                        except Exception as hist_err:
+                            logger.warning(f"Failed to log run to history: {hist_err}")
 
-                    # Clear progress UI elements smoothly
-                    progress_bar.empty()
+                        # Clear progress UI elements smoothly
+                        progress_bar.empty()
+                    
+                    st.session_state.last_results_df = results_df
+                    st.session_state.last_engine_instance = engine_instance
+                    st.session_state.last_soil_profile = soil_profile
+                    st.session_state.last_weather_status_msg = weather_status_msg
+                    st.session_state.simulation_run_active = True
+                else:
+                    # Restore from session state
+                    results_df = st.session_state.last_results_df
+                    engine_instance = st.session_state.last_engine_instance
+                    soil_profile = st.session_state.last_soil_profile
+                    weather_status_msg = st.session_state.last_weather_status_msg
                 
                 # 5. Extract results metrics
                 max_lai_val = results_df["LAI"].max()
