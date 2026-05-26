@@ -93,8 +93,9 @@ class ExcelIngestionAgent:
             Dict[str, Any]: Terminology-mapped crop parameters dictionary.
         """
         try:
-            wb = openpyxl.load_workbook(file_input, data_only=True)
-            sheets = wb.sheetnames
+            # Use pandas ExcelFile to inspect sheet names (supports .xls and .xlsx automatically via xlrd/openpyxl)
+            xls = pd.ExcelFile(file_input)
+            sheets = xls.sheet_names
             
             # 1. Identify parameter sheets using keyword heuristics
             target_sheet = sheets[0]
@@ -106,10 +107,19 @@ class ExcelIngestionAgent:
             
             logger.info(f"Ingestion Agent scanning target parameters sheet: {target_sheet}")
             
-            # Load raw sheet data without filters to check structural orientation
-            sheet_obj = wb[target_sheet]
-            max_row = sheet_obj.max_row
-            max_col = sheet_obj.max_column
+            # Load raw sheet data as a 0-indexed DataFrame grid without headers
+            df_sheet = pd.read_excel(file_input, sheet_name=target_sheet, header=None)
+            max_row = len(df_sheet)
+            max_col = len(df_sheet.columns)
+            
+            # 1-indexed helper matching openpyxl semantics
+            def get_cell_val(r_1: int, c_1: int) -> Any:
+                r_0 = r_1 - 1
+                c_0 = c_1 - 1
+                if 0 <= r_0 < max_row and 0 <= c_0 < max_col:
+                    val = df_sheet.iloc[r_0, c_0]
+                    return val if pd.notna(val) else None
+                return None
             
             raw_params = {}
             
@@ -120,12 +130,12 @@ class ExcelIngestionAgent:
             has_scenario_selector = False
             
             for r in range(1, min(max_row + 1, 15)):
-                val_c0 = sheet_obj.cell(row=r, column=1).value
+                val_c0 = get_cell_val(r, 1)
                 if val_c0 and "colno" in str(val_c0).lower():
                     # Scenario selector detected! Read selector value from row
                     # Search across row cells for scenario index
                     for col_idx in range(2, min(max_col + 1, 10)):
-                        cell_val = sheet_obj.cell(row=r, column=col_idx).value
+                        cell_val = get_cell_val(r, col_idx)
                         if cell_val is not None:
                             try:
                                 scenario_col_index = int(cell_val) - 1 # BOKU uses 1-based index (e.g., column index 3)
@@ -136,15 +146,15 @@ class ExcelIngestionAgent:
                                 pass
                     if has_scenario_selector:
                         break
-
+ 
             # 3. Dynamic Vertical Row Extraction Loop
             # Scan rows vertically. Translate terms to strict engine keys.
             vertical_matches = 0
             for r in range(1, max_row + 1):
-                key_candidate = sheet_obj.cell(row=r, column=1).value
+                key_candidate = get_cell_val(r, 1)
                 if key_candidate is None:
                     # Try second column (column B)
-                    key_candidate = sheet_obj.cell(row=r, column=2).value
+                    key_candidate = get_cell_val(r, 2)
                     val_col_idx = scenario_col_index if has_scenario_selector else 3
                 else:
                     val_col_idx = scenario_col_index if has_scenario_selector else 2
@@ -153,7 +163,7 @@ class ExcelIngestionAgent:
                     mapped_var = cls.map_term_to_engine_variable(str(key_candidate))
                     if mapped_var:
                         # Extract value from active value column
-                        val_candidate = sheet_obj.cell(row=r, column=val_col_idx + 1).value
+                        val_candidate = get_cell_val(r, val_col_idx + 1)
                         if val_candidate is not None:
                             try:
                                 # Clean string numbers or percentage values
@@ -164,7 +174,7 @@ class ExcelIngestionAgent:
                                 vertical_matches += 1
                             except (ValueError, TypeError):
                                 raw_params[mapped_var] = val_candidate
-
+ 
             # 4. Fallback: Horizontal Layout Scanning
             # If vertical scanning extracted fewer than 3 parameters, we switch to horizontal scanning
             # (columns represent keys, rows represent scenarios/cultivars)

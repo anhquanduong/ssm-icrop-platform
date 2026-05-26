@@ -1,4 +1,5 @@
 @echo off
+echo [LAUNCHING INDEPENDENT ICROP 2 RUNTIME]
 rem Define a machine-isolated virtual environment folder using the workstation's hostname.
 set VENV_DIR=env_%COMPUTERNAME%_v2
 
@@ -108,7 +109,7 @@ echo Checking/installing dependencies from requirements_v2.txt...
 pip install -q -r requirements_v2.txt
 
 echo "SSM-iCrop2 Environment Ready. Launching dashboard on port 8502..."
-streamlit run frontend/ui.py --server.port 8502
+streamlit run frontend/ui.py --server.port 8502 --server.address 127.0.0.1
 
 rem Safety catch so the terminal window remains open on crash/exit
 pause

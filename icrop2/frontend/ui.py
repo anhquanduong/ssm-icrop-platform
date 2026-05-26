@@ -41,6 +41,13 @@ from utils.weather_processor import WeatherProcessor
 from core.soil_api import fetch_isric_soil_data
 from utils.history_ledger import format_simulation_run
 from utils.data_exporter import export_history_to_csv, export_history_to_xlsx
+from utils.onedrive_helper import (
+    is_onedrive_path_valid,
+    list_onedrive_weather_files,
+    load_onedrive_weather_file,
+    list_onedrive_calibration_files,
+    load_onedrive_calibration_file
+)
 
 # Relational security submodules
 from utils.db_manager import DatabaseManager
@@ -487,31 +494,110 @@ with st.sidebar:
         active_profile = DEFAULT_CROP_PARAMETERS["Maize"].copy()
         
         st.subheader("📝 Design New Crop Profile")
+        
+        # --- Local OneDrive Cultivar Parameters Ingestion ---
+        if is_onedrive_path_valid():
+            with st.expander("📂 Ingest Cultivar Parameters from OneDrive", expanded=False):
+                cal_files = list_onedrive_calibration_files()
+                if cal_files:
+                    selected_cal_file = st.selectbox(
+                        "Select Calibration File",
+                        options=cal_files,
+                        help="Pick a crop calibration Excel sheet from local OneDrive reference directory."
+                    )
+                    if st.button("📥 Ingest and Pre-fill Parameters"):
+                        try:
+                            parsed_params = load_onedrive_calibration_file(selected_cal_file)
+                            st.session_state["icrop2_new_crop_name"] = os.path.splitext(selected_cal_file)[0]
+                            st.session_state["icrop2_new_tbd"] = parsed_params.get("TBD", 8.0)
+                            st.session_state["icrop2_new_rue"] = parsed_params.get("IRUE", parsed_params.get("RUE", 1.6))
+                            st.session_state["icrop2_new_sla"] = parsed_params.get("SLA", parsed_params.get("SpecificLeafArea", 0.022))
+                            st.session_state["icrop2_new_produce_type"] = parsed_params.get("crop_produce_type", "Fruit/Seed")
+                            st.session_state["icrop2_new_lifecycle_strategy"] = parsed_params.get("lifecycle_strategy", "Annual (Single-Season)")
+                            st.session_state["icrop2_new_t_dormancy_trigger"] = parsed_params.get("t_dormancy_trigger", 5.0)
+                            st.session_state["icrop2_new_t_base_winter"] = parsed_params.get("t_base_winter", 0.0)
+                            st.success("✅ Parameters successfully ingested from local OneDrive file!")
+                            st.rerun()
+                        except Exception as ing_err:
+                            st.error(f"Failed to ingest OneDrive calibration parameters: {ing_err}")
+                else:
+                    st.warning("⚠️ No valid calibration sheets found in local OneDrive directory.")
+        
+        # Initialize form state values
+        if "icrop2_new_crop_name" not in st.session_state:
+            st.session_state["icrop2_new_crop_name"] = ""
+        if "icrop2_new_tbd" not in st.session_state:
+            st.session_state["icrop2_new_tbd"] = 8.0
+        if "icrop2_new_rue" not in st.session_state:
+            st.session_state["icrop2_new_rue"] = 1.6
+        if "icrop2_new_sla" not in st.session_state:
+            st.session_state["icrop2_new_sla"] = 0.022
+        if "icrop2_new_produce_type" not in st.session_state:
+            st.session_state["icrop2_new_produce_type"] = "Fruit/Seed"
+        if "icrop2_new_lifecycle_strategy" not in st.session_state:
+            st.session_state["icrop2_new_lifecycle_strategy"] = "Annual (Single-Season)"
+        if "icrop2_new_t_dormancy_trigger" not in st.session_state:
+            st.session_state["icrop2_new_t_dormancy_trigger"] = 5.0
+        if "icrop2_new_t_base_winter" not in st.session_state:
+            st.session_state["icrop2_new_t_base_winter"] = 0.0
+
         with st.form("new_crop_form", clear_on_submit=True):
-            new_crop_name = st.text_input("Crop Name (e.g., 'Winter Wheat BOKU')", placeholder="Enter unique name...")
-            new_tbd = st.number_input("Base Temperature (TBD - °C)", value=8.0, step=0.5)
-            new_rue = st.number_input("Max Radiation Use Efficiency (RUEmax - g/MJ)", value=1.6, step=0.1, min_value=0.5, max_value=3.5)
-            new_sla = st.number_input("Specific Leaf Area (SLA - m²/g)", value=0.022, format="%.4f", step=0.001)
+            new_crop_name = st.text_input(
+                "Crop Name (e.g., 'Winter Wheat BOKU')", 
+                value=st.session_state["icrop2_new_crop_name"],
+                placeholder="Enter unique name..."
+            )
+            new_tbd = st.number_input(
+                "Base Temperature (TBD - °C)", 
+                value=st.session_state["icrop2_new_tbd"], 
+                step=0.5
+            )
+            new_rue = st.number_input(
+                "Max Radiation Use Efficiency (RUEmax - g/MJ)", 
+                value=st.session_state["icrop2_new_rue"], 
+                step=0.1, 
+                min_value=0.5, 
+                max_value=3.5
+            )
+            new_sla = st.number_input(
+                "Specific Leaf Area (SLA - m²/g)", 
+                value=st.session_state["icrop2_new_sla"], 
+                format="%.4f", 
+                step=0.001
+            )
+            
+            produce_options = ["Fruit/Seed", "Tuber/Root", "Vegetative Foliage"]
+            strategy_options = ["Annual (Single-Season)", "Multi-Year Accumulation", "Cyclical Perennial"]
+            
+            prod_idx = produce_options.index(st.session_state["icrop2_new_produce_type"]) if st.session_state["icrop2_new_produce_type"] in produce_options else 0
+            strat_idx = strategy_options.index(st.session_state["icrop2_new_lifecycle_strategy"]) if st.session_state["icrop2_new_lifecycle_strategy"] in strategy_options else 0
+
             crop_produce_type = st.selectbox(
                 "🌾 Primary Harvested Organ (Production Type):",
-                options=["Fruit/Seed", "Tuber/Root", "Vegetative Foliage"],
+                options=produce_options,
+                index=prod_idx,
                 help="Select what component of the biomass constitutes the economic yield for this crop species."
             )
             lifecycle_strategy = st.selectbox(
                 "⏳ Crop Lifecycle Growth Strategy:",
-                options=["Annual (Single-Season)", "Multi-Year Accumulation", "Cyclical Perennial"],
+                options=strategy_options,
+                index=strat_idx,
                 help="Select the physiological lifecycle pattern. Multi-Year Accumulation keeps plants alive continuously. Cyclical Perennial resets fruit pools annually."
             )
             
             st.markdown("### ❄️ Winter & Dormancy Physiological Traits")
             t_dormancy_trigger = st.slider(
                 "🍁 Leaf Senescence/Dormancy Trigger Temperature (°C):",
-                min_value=-5.0, max_value=12.0, value=5.0, step=0.5,
+                min_value=-5.0, max_value=12.0, 
+                value=float(st.session_state["icrop2_new_t_dormancy_trigger"]), 
+                step=0.5,
                 help="When the 5-day moving average temperature drops below this value, the canopy automatically goes dormant."
             )
             t_base_winter = st.slider(
                 "🥶 Winter Base Metabolic Temperature (Tbase_winter, °C):",
-                min_value=-2.0, max_value=5.0, value=0.0, step=0.5,
+                min_value=-2.0, max_value=5.0, 
+                value=float(st.session_state["icrop2_new_t_base_winter"]), 
+                step=0.5,
                 help="The absolute temperature floor below which biological development stalls entirely for this crop."
             )
             
@@ -520,6 +606,10 @@ with st.sidebar:
             submit_btn = st.form_submit_button("Save and Register Crop Profile")
             
             if submit_btn:
+                # Clear custom ingestion session states after save
+                for k in ["icrop2_new_crop_name", "icrop2_new_tbd", "icrop2_new_rue", "icrop2_new_sla", "icrop2_new_produce_type", "icrop2_new_lifecycle_strategy", "icrop2_new_t_dormancy_trigger", "icrop2_new_t_base_winter"]:
+                    if k in st.session_state:
+                        del st.session_state[k]
                 # Validation rules
                 if not new_crop_name.strip():
                     st.error("Crop name cannot be empty.")
@@ -758,17 +848,22 @@ with col_left:
             }
     
     st.markdown("##### 1. Meteorological Ingestion Engine")
+    weather_options = [
+        "🌐 Use System Weather (Auto-Fetch via Coordinates/Map)", 
+        "📁 Upload My Own Weather Data File (.csv / .xlsx)"
+    ]
+    if is_onedrive_path_valid():
+        weather_options.append("📂 Load Weather from OneDrive Reference Path")
+        
     weather_source = st.radio(
         "Select Weather Data Source",
-        [
-            "🌐 Use System Weather (Auto-Fetch via Coordinates/Map)", 
-            "📁 Upload My Own Weather Data File (.csv / .xlsx)"
-        ]
+        weather_options
     )
     
     weather_df = None
     uploaded_lat = None
     uploaded_lon = None
+    selected_w_file = None
     
     if "📁 Upload My Own Weather" in weather_source:
         uploaded_weather_file = st.file_uploader(
@@ -784,6 +879,24 @@ with col_left:
                     st.info(f"📍 Extracted header coordinates: Lat = {uploaded_lat:.3f}, Lon = {uploaded_lon:.3f}")
             except Exception as e:
                 st.error(f"Weather parsing error: {e}")
+    elif "📂 Load Weather from OneDrive" in weather_source:
+        weather_files = list_onedrive_weather_files()
+        if weather_files:
+            selected_w_file = st.selectbox(
+                "Select OneDrive Weather File",
+                options=weather_files,
+                help="Pick a pre-loaded BOKU weather spreadsheet from your local OneDrive Weather folder."
+            )
+            if selected_w_file:
+                try:
+                    weather_df, uploaded_lat, uploaded_lon = load_onedrive_weather_file(selected_w_file)
+                    st.success(f"Successfully loaded {len(weather_df)} weather days from OneDrive: {selected_w_file}")
+                    if uploaded_lat is not None and uploaded_lon is not None:
+                        st.info(f"📍 Extracted coordinates: Lat = {uploaded_lat:.3f}, Lon = {uploaded_lon:.3f}")
+                except Exception as e:
+                    st.error(f"Failed to read OneDrive weather file: {e}")
+        else:
+            st.warning("⚠️ No valid weather sheets found in the OneDrive Weather directory.")
     else:
         # Option 1: System Weather Ingestion Conditional Layout
         st.markdown("##### 2. Interactive Map (Click to Select Coordinates)")
@@ -1239,6 +1352,10 @@ with col_right:
                         if weather_df is None:
                             raise ValueError("Please upload an SSM Weather File first.")
                         weather_status_msg = "Successfully loaded weather matrix from custom uploaded SSM workbook."
+                    elif "📂 Load Weather from OneDrive" in weather_source:
+                        if weather_df is None:
+                            raise ValueError("Please select a OneDrive Weather File first.")
+                        weather_status_msg = f"Successfully loaded weather matrix from local OneDrive workbook: {selected_w_file}"
                     else:
                         # Option 1: fetch from Open-Meteo API
                         # 3. TIMEFRAME VALIDATION LOGIC
