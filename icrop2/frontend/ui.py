@@ -424,7 +424,7 @@ with st.sidebar:
     # Fetch profiles matching privacy boundaries: Public OR owned by current user
     db_profiles = db.get_available_profiles(
         current_user_id=st.session_state.icrop2_user_id,
-        session_key=st.session_state.icrop2_get("session_key")
+        session_key=st.session_state.get("icrop2_session_key")
     )
     
     # Assemble dropdown selection mapping
@@ -639,7 +639,7 @@ with st.sidebar:
                                 crop_name=new_crop_name.strip(),
                                 is_public=is_public_flag,
                                 param_dict=new_params,
-                                session_key=st.session_state.icrop2_get("session_key")
+                                session_key=st.session_state.get("icrop2_session_key")
                             )
                             st.toast("✅ New Crop Profile Registered Successfully!")
                             
@@ -653,8 +653,8 @@ with st.sidebar:
                         except Exception as save_err:
                             st.error(f"Failed to register new crop profile: {save_err}")
                             
-        default_lat = st.session_state.icrop2_get("lat_key", 21.0285)
-        default_lon = st.session_state.icrop2_get("lon_key", 105.8542)
+        default_lat = st.session_state.get("icrop2_lat_key", 21.0285)
+        default_lon = st.session_state.get("icrop2_lon_key", 105.8542)
     else:
         resolved_profile = profile_map[selected_option]
         crop_type = resolved_profile["crop_type"]
@@ -741,7 +741,7 @@ with st.sidebar:
                             crop_name=new_profile_name,
                             is_public=is_public_flag,
                             param_dict=active_profile,
-                            session_key=st.session_state.icrop2_get("session_key")
+                            session_key=st.session_state.get("icrop2_session_key")
                         )
                         st.success(f"Successfully saved profile '{new_profile_name}'!")
                         st.rerun()
@@ -753,8 +753,8 @@ with st.sidebar:
         presets_list = ["Custom Coordinates", "Gerasdorf, Austria (Wheat/Maize Study)", "Iowa, USA (Maize Belt)", "Mekong Delta, Vietnam (Rice/Crops)"]
         
         # Dynamically deduce preset from active coordinates to prevent state drift
-        active_lat = st.session_state.icrop2_get("lat_key", 21.0285)
-        active_lon = st.session_state.icrop2_get("lon_key", 105.8542)
+        active_lat = st.session_state.get("icrop2_lat_key", 21.0285)
+        active_lon = st.session_state.get("icrop2_lon_key", 105.8542)
         if abs(active_lat - 48.2830) < 1e-4 and abs(active_lon - 16.4670) < 1e-4:
             preset_val = "Gerasdorf, Austria (Wheat/Maize Study)"
         elif abs(active_lat - 42.0300) < 1e-4 and abs(active_lon - -93.6310) < 1e-4:
@@ -797,8 +797,8 @@ with st.sidebar:
 
 # Unconditional fallback: ensure default_lat/default_lon are always defined
 # regardless of which sidebar branch (Create Profile vs existing profile) was taken.
-default_lat = st.session_state.icrop2_get("lat_key", 21.0285)
-default_lon = st.session_state.icrop2_get("lon_key", 105.8542)
+default_lat = st.session_state.get("icrop2_lat_key", 21.0285)
+default_lon = st.session_state.get("icrop2_lon_key", 105.8542)
 
 # Create Two-Column Layout for Main Panel
 col_left, col_right = st.columns([1, 1.2], gap="large")
@@ -1236,7 +1236,7 @@ with col_left:
     with c_name:
         scenario_name = st.text_input(
             "Scenario Label",
-            value=f"Run #{len(st.session_state.icrop2_get('sim_history', {})) + 1}",
+            value=f"Run #{len(st.session_state.get('icrop2_sim_history', {})) + 1}",
             help="Enter a unique tag name to save this simulation run in history."
         )
     with c_btn:
@@ -1290,10 +1290,10 @@ with col_right:
                     # Compile unified agricultural management payload
                     # Use session state fallbacks in case widgets weren't explicitly rendered
                     soil_config = {
-                        "depth_mm": st.session_state.icrop2_get("depth_key", 1200),
-                        "initial_water_percent": st.session_state.icrop2_get("initial_water_key", 25.0),
-                        "pawc_mm_m": st.session_state.icrop2_get("pawc_key", 150.0),
-                        "som_percent": st.session_state.icrop2_get("som_key", 2.5)
+                        "depth_mm": st.session_state.get("icrop2_depth_key", 1200),
+                        "initial_water_percent": st.session_state.get("icrop2_initial_water_key", 25.0),
+                        "pawc_mm_m": st.session_state.get("icrop2_pawc_key", 150.0),
+                        "som_percent": st.session_state.get("icrop2_som_key", 2.5)
                     }
                     
                     fertilizer_schedule = [
@@ -1308,7 +1308,7 @@ with col_right:
                     ]
                     
                     water_management = {
-                        "auto_irrigation": "Automatic" in st.session_state.icrop2_get("auto_irrigation_key", "Rainfed / Manual Scheduler"),
+                        "auto_irrigation": "Automatic" in st.session_state.get("icrop2_auto_irrigation_key", "Rainfed / Manual Scheduler"),
                         "irrigation": [
                             {
                                 "doy": int(item["doy"]),
@@ -1339,11 +1339,11 @@ with col_right:
 
                     # Resolve effective coordinates cleanly across both routes
                     # lat/lon are only defined in system weather path; use session state as fallback
-                    _lat_fallback = st.session_state.icrop2_get("lat_key", 21.0285)
-                    _lon_fallback = st.session_state.icrop2_get("lon_key", 105.8542)
+                    _lat_fallback = st.session_state.get("icrop2_lat_key", 21.0285)
+                    _lon_fallback = st.session_state.get("icrop2_lon_key", 105.8542)
                     if "🌐 Use System Weather" in weather_source:
-                        effective_lat = st.session_state.icrop2_get("lat_key", _lat_fallback)
-                        effective_lon = st.session_state.icrop2_get("lon_key", _lon_fallback)
+                        effective_lat = st.session_state.get("icrop2_lat_key", _lat_fallback)
+                        effective_lon = st.session_state.get("icrop2_lon_key", _lon_fallback)
                     else:
                         effective_lat = uploaded_lat if uploaded_lat is not None else default_lat
                         effective_lon = uploaded_lon if uploaded_lon is not None else default_lon
@@ -1599,7 +1599,7 @@ with col_right:
     with tab_comp:
         st.subheader("📊 Simulation History & Scenario Comparison Workspace")
         
-        if not st.session_state.icrop2_get("sim_history"):
+        if not st.session_state.get("icrop2_sim_history"):
             st.info("ℹ️ No historical runs logged yet. Execute a simulation to seed the ledger.")
             
             with st.expander("📥 Export Results & Simulation Data Logs", expanded=False):
@@ -1661,7 +1661,7 @@ with col_right:
             st.markdown("---")
             st.markdown("### 📊 Deep-Dive Scenario Data Inspector")
             
-            history_options = list(st.session_state.icrop2_get("detailed_scenarios", {}).keys())
+            history_options = list(st.session_state.get("icrop2_detailed_scenarios", {}).keys())
             
             if history_options:
                 selected_inspect_run = st.selectbox(
@@ -1752,17 +1752,17 @@ with col_right:
                 with col_xlsx:
                     # Excel generation
                     active_soil_config = {
-                        "depth_mm": st.session_state.icrop2_get("depth_key", 1200),
-                        "initial_water_percent": st.session_state.icrop2_get("initial_water_key", 25.0),
-                        "pawc_mm_m": st.session_state.icrop2_get("pawc_key", 150.0),
-                        "som_percent": st.session_state.icrop2_get("som_key", 2.5)
+                        "depth_mm": st.session_state.get("icrop2_depth_key", 1200),
+                        "initial_water_percent": st.session_state.get("icrop2_initial_water_key", 25.0),
+                        "pawc_mm_m": st.session_state.get("icrop2_pawc_key", 150.0),
+                        "som_percent": st.session_state.get("icrop2_som_key", 2.5)
                     }
                     xlsx_data = export_history_to_xlsx(
                         sim_history=st.session_state["icrop2_sim_history"],
                         soil_config=active_soil_config,
-                        latitude=st.session_state.icrop2_get("lat_key", 21.0285),
-                        longitude=st.session_state.icrop2_get("lon_key", 105.8542),
-                        crop_name=st.session_state.icrop2_get("selected_crop_profile", "Default Crop")
+                        latitude=st.session_state.get("icrop2_lat_key", 21.0285),
+                        longitude=st.session_state.get("icrop2_lon_key", 105.8542),
+                        crop_name=st.session_state.get("icrop2_selected_crop_profile", "Default Crop")
                     )
                     st.download_button(
                         label="Download Formatted Research Workbook (.XLSX)",
