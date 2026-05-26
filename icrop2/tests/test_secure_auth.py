@@ -90,5 +90,42 @@ class TestSecureAuthentication8502(unittest.TestCase):
         sent_mail = auth_secure.LOCAL_MAILBOX_SIMULATOR[0]
         self.assertIn("http://localhost:8502/?reset_token=", sent_mail["body_html"])
 
+    def test_session_token_persistence_verification(self):
+        """Assert session tokens are written on login and can be verified to load canonical payloads."""
+        username = "token_tester"
+        email = "tok@test.com"
+        password = "secret_password_123"
+        
+        # Register and verify account
+        auth_secure.register_secure_user(
+            username=username, email=email, password=password, name="Token Tester", workplace="BOKU"
+        )
+        with self.db.get_connection() as conn:
+            conn.execute("UPDATE users SET is_verified = 1 WHERE username = ?", (username,))
+            conn.commit()
+            
+        # Log in to generate token
+        success, msg, payload = auth_secure.authenticate_secure_user(username, password)
+        self.assertTrue(success)
+        self.assertIsNotNone(payload)
+        
+        session_token = payload.get("session_token")
+        self.assertIsNotNone(session_token)
+        self.assertEqual(len(session_token), 48)  # secrets.token_hex(24) returns 48 chars
+        
+        # Verify the session token in database
+        verify_success, verify_payload = auth_secure.verify_session_token(session_token)
+        self.assertTrue(verify_success)
+        self.assertIsNotNone(verify_payload)
+        self.assertEqual(verify_payload["user_id"], payload["user_id"])
+        self.assertEqual(verify_payload["username"], username)
+        self.assertEqual(verify_payload["email"], email)
+        self.assertEqual(verify_payload["session_key"], payload["session_key"])
+        
+        # Test verification of unregistered/invalid token
+        fail_success, fail_payload = auth_secure.verify_session_token("fake_token_hex_123")
+        self.assertFalse(fail_success)
+        self.assertIsNone(fail_payload)
+
 if __name__ == "__main__":
     unittest.main()

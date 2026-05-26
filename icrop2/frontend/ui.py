@@ -59,6 +59,7 @@ from utils.auth_secure import (
     execute_password_reset_token, 
     update_user_profile,
     resend_verification_email,
+    verify_session_token,
     LOCAL_MAILBOX_SIMULATOR
 )
 
@@ -241,8 +242,42 @@ if "icrop2_last_soil_profile" not in st.session_state:
 if "icrop2_last_weather_status_msg" not in st.session_state:
     st.session_state.icrop2_last_weather_status_msg = ""
 
-# Intercept and process browser query parameters for activation and resets
+# Intercept and process browser query parameters for activation, resets, and persistent sessions
 query_params = st.query_params
+
+if "session_token" in query_params:
+    s_token = query_params["session_token"]
+    s_success, s_payload = verify_session_token(s_token)
+    if s_success:
+        st.session_state.icrop2_logged_in = True
+        st.session_state.icrop2_user_id = s_payload["user_id"]
+        st.session_state.icrop2_username = s_payload["username"]
+        st.session_state.icrop2_email = s_payload["email"]
+        st.session_state.icrop2_name = s_payload["name"]
+        st.session_state.icrop2_workplace = s_payload["workplace"]
+        st.session_state.icrop2_is_verified = s_payload["is_verified"]
+        st.session_state.icrop2_session_token = s_payload["session_token"]
+        st.session_state.icrop2_session_key = s_payload["session_key"]
+    st.query_params.clear()
+
+# Check browser localStorage for persistent sessions if not currently authenticated
+if not st.session_state.icrop2_logged_in:
+    import streamlit.components.v1 as components
+    components.html(
+        """
+        <script>
+        const token = localStorage.getItem("icrop2_session_token");
+        if (token) {
+            const url = new URL(window.parent.location.href);
+            if (!url.searchParams.has("session_token")) {
+                url.searchParams.set("session_token", token);
+                window.parent.location.href = url.href;
+            }
+        }
+        </script>
+        """,
+        height=0
+    )
 
 if "verify_token" in query_params:
     token = query_params["verify_token"]
@@ -304,7 +339,19 @@ if not st.session_state.icrop2_logged_in:
                 st.session_state.icrop2_session_key = payload.get("session_key")
                 
                 st.success("Access Granted! Loading C4 simulation core...")
-                st.rerun()
+                import streamlit.components.v1 as components
+                components.html(
+                    f"""
+                    <script>
+                    localStorage.setItem("icrop2_session_token", "{payload['session_token']}");
+                    setTimeout(() => {{
+                        window.parent.location.reload();
+                    }}, 100);
+                    </script>
+                    """,
+                    height=0
+                )
+                st.stop()
             else:
                 st.error(msg)
                 
@@ -411,7 +458,20 @@ if st.sidebar.button("🚪 Log Out", width='stretch'):
     st.session_state.icrop2_is_verified = 0
     st.session_state.icrop2_session_token = None
     st.session_state.icrop2_session_key = None
-    st.rerun()
+    
+    import streamlit.components.v1 as components
+    components.html(
+        """
+        <script>
+        localStorage.removeItem("icrop2_session_token");
+        setTimeout(() => {
+            window.parent.location.reload();
+        }, 100);
+        </script>
+        """,
+        height=0
+    )
+    st.stop()
 
 # ----------------- SIDEBAR CONFIGURATION (Crop parameter routing & tweak panel) -----------------
 with st.sidebar:
@@ -854,9 +914,7 @@ with col_left:
         "🌐 Use System Weather (Auto-Fetch via Coordinates/Map)", 
         "📁 Upload My Own Weather Data File (.csv / .xlsx)"
     ]
-    if is_onedrive_path_valid():
-        weather_options.append("📂 Load Weather from OneDrive Reference Path")
-        
+    
     weather_source = st.radio(
         "Select Weather Data Source",
         weather_options
@@ -1245,6 +1303,19 @@ with col_left:
 
 # ----------------- RIGHT COLUMN: CHARTS & METRICS VIEWPORT -----------------
 with col_right:
+    st.markdown(
+        """
+        <div style="display: flex; align-items: center; margin-bottom: 20px;">
+            <span style="font-size: 28px; font-weight: 800; color: #1E3A8A; font-family: 'Inter', sans-serif; letter-spacing: -0.5px;">
+                🌱 SSM-iCrop<span style="color: #10B981;">2</span>
+            </span>
+            <span style="margin-left: 12px; padding: 3px 8px; font-size: 11px; font-weight: 600; color: #047857; background-color: #D1FAE5; border-radius: 12px; font-family: 'Inter', sans-serif;">
+                v2.0 Core
+            </span>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
     tab_sim, tab_comp, tab_acc = st.tabs(["📊 Simulation Dashboard", "🔄 Scenario Comparison", "👤 My Account"])
     
     with tab_sim:
