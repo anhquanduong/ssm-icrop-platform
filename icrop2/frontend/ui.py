@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
+from streamlit_cookies_controller import CookieController
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -241,6 +242,9 @@ if "icrop2_last_soil_profile" not in st.session_state:
     st.session_state.icrop2_last_soil_profile = None
 if "icrop2_last_weather_status_msg" not in st.session_state:
     st.session_state.icrop2_last_weather_status_msg = ""
+if "icrop2_cookie_controller" not in st.session_state:
+    st.session_state.icrop2_cookie_controller = CookieController()
+controller = st.session_state.icrop2_cookie_controller
 
 # Intercept and process browser query parameters for activation, resets, and persistent sessions
 query_params = st.query_params
@@ -260,24 +264,22 @@ if "session_token" in query_params:
         st.session_state.icrop2_session_key = s_payload["session_key"]
     st.query_params.clear()
 
-# Check browser localStorage for persistent sessions if not currently authenticated
+# Check cookies for persistent sessions if not currently authenticated
 if not st.session_state.icrop2_logged_in:
-    import streamlit.components.v1 as components
-    components.html(
-        """
-        <script>
-        const token = localStorage.getItem("icrop2_session_token");
-        if (token) {
-            const url = new URL(window.parent.location.href);
-            if (!url.searchParams.has("session_token")) {
-                url.searchParams.set("session_token", token);
-                window.parent.location.href = url.href;
-            }
-        }
-        </script>
-        """,
-        height=0
-    )
+    token = controller.get("icrop2_session_token")
+    if token:
+        s_success, s_payload = verify_session_token(token)
+        if s_success:
+            st.session_state.icrop2_logged_in = True
+            st.session_state.icrop2_user_id = s_payload["user_id"]
+            st.session_state.icrop2_username = s_payload["username"]
+            st.session_state.icrop2_email = s_payload["email"]
+            st.session_state.icrop2_name = s_payload["name"]
+            st.session_state.icrop2_workplace = s_payload["workplace"]
+            st.session_state.icrop2_is_verified = s_payload["is_verified"]
+            st.session_state.icrop2_session_token = s_payload["session_token"]
+            st.session_state.icrop2_session_key = s_payload["session_key"]
+            st.rerun()
 
 if "verify_token" in query_params:
     token = query_params["verify_token"]
@@ -338,20 +340,9 @@ if not st.session_state.icrop2_logged_in:
                 st.session_state.icrop2_session_token = payload["session_token"]
                 st.session_state.icrop2_session_key = payload.get("session_key")
                 
+                controller.set("icrop2_session_token", payload["session_token"])
                 st.success("Access Granted! Loading C4 simulation core...")
-                import streamlit.components.v1 as components
-                components.html(
-                    f"""
-                    <script>
-                    localStorage.setItem("icrop2_session_token", "{payload['session_token']}");
-                    setTimeout(() => {{
-                        window.parent.location.reload();
-                    }}, 100);
-                    </script>
-                    """,
-                    height=0
-                )
-                st.stop()
+                st.rerun()
             else:
                 st.error(msg)
                 
@@ -459,19 +450,8 @@ if st.sidebar.button("🚪 Log Out", width='stretch'):
     st.session_state.icrop2_session_token = None
     st.session_state.icrop2_session_key = None
     
-    import streamlit.components.v1 as components
-    components.html(
-        """
-        <script>
-        localStorage.removeItem("icrop2_session_token");
-        setTimeout(() => {
-            window.parent.location.reload();
-        }, 100);
-        </script>
-        """,
-        height=0
-    )
-    st.stop()
+    controller.remove("icrop2_session_token")
+    st.rerun()
 
 # ----------------- SIDEBAR CONFIGURATION (Crop parameter routing & tweak panel) -----------------
 with st.sidebar:

@@ -61,8 +61,13 @@ were redirected from `http://localhost:8501` to `http://localhost:8502` to match
 
 ### 8. Green Verification Runs for Dual Runtimes
 We successfully verified both test suites concurrently in their respective paths:
-* **iCrop 2 (Sandbox)**: 14 out of 14 unit and integration tests passed cleanly (including a newly authored `test_secure_auth.py` verifying the correct port `8502` output for email links).
+* **iCrop 2 (Sandbox)**: 15 out of 15 unit and integration tests passed cleanly (including `test_secure_auth.py` verifying the correct port `8502` output for email links and secure session token loading).
 * **iCrop 1 (Production)**: 39 out of 39 tests passed cleanly (including full cryptographic, database migration, and real SMTP network integrations).
+
+### 9. Streamlit Sandbox Cookie-Controller Refactoring
+We identified and resolved the browser security sandbox trap:
+* **The Issue**: Streamlit's iframe components (`st.components.v1.html`) are sandboxed and served from a separate origin, causing the browser to throw a cross-origin security exception whenever the iframe script attempts to read/write `localStorage` or execute `window.parent.location.reload()`, which completely broke logins.
+* **The Solution**: We integrated `streamlit-cookies-controller` natively in Python. The application now reads, sets, and removes client-side cookies directly over Streamlit's secure WebSocket bridge without invoking iframe sandboxes. Logins and logouts now execute instantly with smooth `st.rerun()` reactivity and flawless persistence across tabs and refreshes.
 
 ---
 
@@ -76,5 +81,6 @@ When you open this folder on your Home PC:
 
 ---
 
-*Log generated on 2026-05-26 23:45 (Laptop Local Time) by Antigravity.*
+*Log generated on 2026-05-27 00:25 (Laptop Local Time) by Antigravity.*
+
 
