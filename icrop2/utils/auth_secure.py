@@ -146,9 +146,9 @@ def register_secure_user(username: str, email: str, password: str, name: str, wo
             
             # Dispatch verification email
             try:
-                base_url = st.secrets.get("smtp", {}).get("base_url", "http://localhost:8501").rstrip("/")
+                base_url = st.secrets.get("smtp", {}).get("base_url", "http://localhost:8502").rstrip("/")
             except Exception:
-                base_url = "http://localhost:8501"
+                base_url = "http://localhost:8502"
             verify_url = f"{base_url}/?verify_token={verify_token}"
             subject = "🌱 Verify Your BOKU SSM-iCrop Account"
             
@@ -355,9 +355,9 @@ def resend_verification_email(email_or_username: str) -> Tuple[bool, str]:
         
         # Build URL dynamically
         try:
-            base_url = st.secrets.get("smtp", {}).get("base_url", "http://localhost:8501").rstrip("/")
+            base_url = st.secrets.get("smtp", {}).get("base_url", "http://localhost:8502").rstrip("/")
         except Exception:
-            base_url = "http://localhost:8501"
+            base_url = "http://localhost:8502"
             
         verify_url = f"{base_url}/?verify_token={new_token}"
         subject = "🌱 Verify Your BOKU SSM-iCrop Account"
@@ -417,9 +417,9 @@ def request_password_reset(email: str) -> Tuple[bool, str]:
         db.log_security_event(uid, "Password reset token requested", "127.0.0.1")
         
         try:
-            base_url = st.secrets.get("smtp", {}).get("base_url", "http://localhost:8501").rstrip("/")
+            base_url = st.secrets.get("smtp", {}).get("base_url", "http://localhost:8502").rstrip("/")
         except Exception:
-            base_url = "http://localhost:8501"
+            base_url = "http://localhost:8502"
         reset_url = f"{base_url}/?reset_token={reset_token}"
         subject = "🔐 SSM-iCrop Password Reset Request"
         body_html = f"""
