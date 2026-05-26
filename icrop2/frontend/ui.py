@@ -812,6 +812,7 @@ with col_left:
         "Select Model Simulation Fidelity", 
         ["Original SSM-iCrop (Potential Yield)", "Advanced Agro-Climate Model (Stress Limited)"],
         index=1,  # Default to Advanced
+        key="icrop2_sim_mode_selection",
         help="Choose 'Original SSM-iCrop (Potential Yield)' to run textbook potential yields bypass soil moisture/nutrient stresses entirely, or select 'Advanced' for full biophysical environmental simulation."
     )
     engine_mode = "Classic" if "Original" in sim_mode_selection else "Advanced"

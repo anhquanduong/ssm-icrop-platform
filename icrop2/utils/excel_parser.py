@@ -49,7 +49,10 @@ SYNONYM_MAP = {
     "SNCG": ["sncg", "sncg =", "stem_n_green"],
     "SNCS": ["sncs", "sncs =", "stem_n_senesced"],
     "GNC": ["gnc", "gnc =", "grain_n_conc"],
-    "MXNUP": ["mxnup", "mxnup =", "max_n_uptake"]
+    "MXNUP": ["mxnup", "mxnup =", "max_n_uptake"],
+    "SNAVL_init": ["snavl_init", "initial_n", "initial_nitrogen", "initial soil nitrogen", "snavl", "soil_n_init"],
+    "leach_eff": ["leach_eff", "leach_efficiency", "leaching efficiency", "leaching_eff", "leach efficiency"],
+    "tbt": ["tbt", "tipping_bucket_threshold", "tipping bucket", "drainage threshold", "tbt_threshold"]
 }
 
 # Pre-compiled BOKU defaults in case of missing variables
@@ -59,7 +62,10 @@ DEFAULTS_MATRIX = {
     "MaxTemp": 45.0,
     "RUE": 1.6,
     "SpecificLeafArea": 0.02,
-    "MaxLAI": 5.0
+    "MaxLAI": 5.0,
+    "tbt": 1.0,
+    "leach_eff": 0.8,
+    "SNAVL_init": 150.0
 }
 
 

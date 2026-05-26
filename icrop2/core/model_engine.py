@@ -459,7 +459,7 @@ class SSMiCropEngine:
         
         # Dynamic initial root capacity & soil water / nutrient pool setup
         if self.mode == "Advanced":
-            self.current_soil_n = self.soil_config.get("initial_n", 150.0)
+            self.current_soil_n = cp.get("SNAVL_init", self.soil_config.get("initial_n", 150.0))
             if self.advanced_options.get("use_root_growth", False):
                 self.total_storage_capacity = max(1.0, ideport * (self.pawc / 1000.0))
             else:
@@ -982,7 +982,7 @@ class SSMiCropEngine:
                     leaching_fraction = max(0.0, min(leaching_fraction, 0.75))
                     
                     # Calculate actual mass leached
-                    leaching_efficiency = self.advanced_options.get("leaching_efficiency", 0.8)
+                    leaching_efficiency = cp.get("leach_eff", self.advanced_options.get("leaching_efficiency", 0.8))
                     N_Leached_Daily = min(SNAVL * leaching_fraction * leaching_efficiency, max(0.0, SNAVL))
                     
                     # Update available soil mineral nitrogen pool
@@ -1085,7 +1085,9 @@ class SSMiCropEngine:
                 for l in range(nlayer):
                     flin_l = rain + irgw + irr_today - runof if l == 0 else flout[l-1]
                     wl[l] = wl[l] + flin_l - wu[l] - se[l]
-                    flout[l] = max(0.0, (wl[l] - wlul[l]) * drainf[l])
+                    tbt_val = cp.get("tbt", 1.0)
+                    drainage_threshold_l = wlul[l] * tbt_val
+                    flout[l] = max(0.0, (wl[l] - drainage_threshold_l) * drainf[l])
                     wl[l] = wl[l] - flout[l]
                     
                     ats_water[l] = max(0.0, wl[l] - wlll[l])

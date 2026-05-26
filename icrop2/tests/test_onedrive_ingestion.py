@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+from unittest.mock import patch
 from utils.onedrive_helper import (
     is_onedrive_path_valid,
     list_onedrive_weather_files,
@@ -9,27 +10,33 @@ from utils.onedrive_helper import (
 )
 from utils.excel_parser import ExcelIngestionAgent
 
-def test_onedrive_path_valid():
+@patch('utils.file_parser.get_active_simulation_mode')
+def test_onedrive_path_valid(mock_mode):
     """
     Asserts that the configured OneDrive reference path is recognized and accessible.
     """
+    mock_mode.return_value = "Original SSM-iCrop (Potential Yield)"
     assert is_onedrive_path_valid() is True
 
-def test_list_onedrive_weather_files():
+@patch('utils.file_parser.get_active_simulation_mode')
+def test_list_onedrive_weather_files(mock_mode):
     """
     Asserts that BOKU weather sheets are correctly listed from the OneDrive subdirectory.
     """
+    mock_mode.return_value = "Original SSM-iCrop (Potential Yield)"
     files = list_onedrive_weather_files()
     assert isinstance(files, list)
     assert len(files) > 0
     assert any(f.endswith('.xls') or f.endswith('.xlsx') for f in files)
     assert "AGHTOGHE.xls" in files
 
-def test_load_onedrive_weather_file():
+@patch('utils.file_parser.get_active_simulation_mode')
+def test_load_onedrive_weather_file(mock_mode):
     """
     Loads and parses a real OneDrive weather file (AGHTOGHE.xls) and asserts it matches
     the canonical engine specifications.
     """
+    mock_mode.return_value = "Original SSM-iCrop (Potential Yield)"
     weather_df, lat, lon = load_onedrive_weather_file("AGHTOGHE.xls")
     
     # Assert return types
@@ -46,20 +53,24 @@ def test_load_onedrive_weather_file():
     assert 30.0 < lat < 42.0   # Iran region Latitude bounds
     assert 45.0 < lon < 60.0   # Iran region Longitude bounds
 
-def test_list_onedrive_calibration_files():
+@patch('utils.file_parser.get_active_simulation_mode')
+def test_list_onedrive_calibration_files(mock_mode):
     """
     Asserts that cultivar calibration sheets are correctly scanned from the OneDrive folder.
     """
+    mock_mode.return_value = "Original SSM-iCrop (Potential Yield)"
     files = list_onedrive_calibration_files()
     assert isinstance(files, list)
     assert len(files) > 0
     assert "SSM-iCrop2_2023_2_20.xls" in files
 
-def test_load_onedrive_calibration_file():
+@patch('utils.file_parser.get_active_simulation_mode')
+def test_load_onedrive_calibration_file(mock_mode):
     """
     Loads a real OneDrive calibration workbook (SSM-iCrop2_2023_2_20.xls) and validates
     that physiological variables are mapped correctly.
     """
+    mock_mode.return_value = "Original SSM-iCrop (Potential Yield)"
     params = load_onedrive_calibration_file("SSM-iCrop2_2023_2_20.xls")
     assert isinstance(params, dict)
     assert len(params) > 0
