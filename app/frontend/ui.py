@@ -219,6 +219,8 @@ if "initial_water_key" not in st.session_state:
     st.session_state["initial_water_key"] = 25.0
 if "sim_history" not in st.session_state:
     st.session_state["sim_history"] = {}
+if "detailed_scenarios" not in st.session_state:
+    st.session_state["detailed_scenarios"] = {}
 if "simulation_run_active" not in st.session_state:
     st.session_state.simulation_run_active = False
 if "last_results_df" not in st.session_state:
@@ -1296,6 +1298,9 @@ with col_right:
                         try:
                             compiled_df = format_simulation_run(results_df, scenario_name)
                             st.session_state["sim_history"][scenario_name] = compiled_df
+                            if "detailed_scenarios" not in st.session_state:
+                                st.session_state["detailed_scenarios"] = {}
+                            st.session_state["detailed_scenarios"][scenario_name] = results_df.copy()
                             logger.info(f"Scenario '{scenario_name}' logged in simulation ledger.")
                         except Exception as hist_err:
                             logger.warning(f"Failed to log run to history: {hist_err}")
@@ -1494,6 +1499,34 @@ with col_right:
             else:
                 st.warning("⚠️ Please select at least one scenario run to build charts.")
                 
+            st.markdown("---")
+            st.markdown("### 📊 Deep-Dive Scenario Data Inspector")
+            
+            history_options = list(st.session_state.get("detailed_scenarios", {}).keys())
+            
+            if history_options:
+                selected_inspect_run = st.selectbox(
+                    "🔍 Select a specific historical run to inspect in close detail:",
+                    options=history_options,
+                    index=len(history_options) - 1 # Default highlight to the most recent run
+                )
+                
+                # Pull the unredacted daily dataframe slice from memory
+                inspect_df = st.session_state["detailed_scenarios"][selected_inspect_run]
+                
+                # Provide a clean CSV download button for academic reporting or Excel extraction
+                st.download_button(
+                    label=f"📥 Export '{selected_inspect_run}' Data to CSV",
+                    data=inspect_df.to_csv(index=False).encode('utf-8'),
+                    file_name=f"{selected_inspect_run.replace(' ', '_')}_daily_output.csv",
+                    mime='text/csv'
+                )
+                
+                # Display the full interactive data frame spreadsheet matrix
+                st.dataframe(inspect_df, use_container_width=True)
+            else:
+                st.info("No simulation runs recorded in the active workspace session ledger yet. Run a scenario to populate the detailed inspector.")
+            
             st.markdown("---")
             
             # Expander for exporting results
