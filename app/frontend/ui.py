@@ -497,6 +497,24 @@ with st.sidebar:
                 options=["Fruit/Seed", "Tuber/Root", "Vegetative Foliage"],
                 help="Select what component of the biomass constitutes the economic yield for this crop species."
             )
+            lifecycle_strategy = st.selectbox(
+                "⏳ Crop Lifecycle Growth Strategy:",
+                options=["Annual (Single-Season)", "Multi-Year Accumulation", "Cyclical Perennial"],
+                help="Select the physiological lifecycle pattern. Multi-Year Accumulation keeps plants alive continuously. Cyclical Perennial resets fruit pools annually."
+            )
+            
+            st.markdown("### ❄️ Winter & Dormancy Physiological Traits")
+            t_dormancy_trigger = st.slider(
+                "🍁 Leaf Senescence/Dormancy Trigger Temperature (°C):",
+                min_value=-5.0, max_value=12.0, value=5.0, step=0.5,
+                help="When the 5-day moving average temperature drops below this value, the canopy automatically goes dormant."
+            )
+            t_base_winter = st.slider(
+                "🥶 Winter Base Metabolic Temperature (Tbase_winter, °C):",
+                min_value=-2.0, max_value=5.0, value=0.0, step=0.5,
+                help="The absolute temperature floor below which biological development stalls entirely for this crop."
+            )
+            
             new_privacy = st.radio("Privacy Status", ["🔒 Private (Me Only)", "🌐 Public (Share with all users)"])
             
             submit_btn = st.form_submit_button("Save and Register Crop Profile")
@@ -519,6 +537,9 @@ with st.sidebar:
                         new_params["IRUE"] = new_rue
                         new_params["SLA"] = new_sla
                         new_params["crop_produce_type"] = crop_produce_type
+                        new_params["lifecycle_strategy"] = lifecycle_strategy
+                        new_params["t_dormancy_trigger"] = t_dormancy_trigger
+                        new_params["t_base_winter"] = t_base_winter
                         
                         is_public_flag = 1 if "Public" in new_privacy else 0
                         
@@ -842,6 +863,8 @@ with col_left:
             max_value=max_val,
             help="Select a simulation period. Global reanalysis data is available from 1940 to 2026."
         )
+        sim_years = st.number_input("⏳ Simulation Duration (Years):", min_value=1, max_value=10, value=1)
+        
         if isinstance(timeframe_input, (list, tuple)) and len(timeframe_input) == 2:
             start_date, end_date = timeframe_input
         else:
@@ -1264,6 +1287,9 @@ with col_right:
                     if sliced_weather.empty:
                         raise ValueError(f"No weather records available in sliced window starting at DOY {sowing_doy} in {target_year}.")
                         
+                    advanced_options = advanced_options.copy()
+                    advanced_options["sim_years"] = sim_years
+                    
                     engine_instance = SSMiCropEngine(
                         weather_df=sliced_weather, 
                         latitude=effective_lat, 
@@ -1272,7 +1298,8 @@ with col_right:
                         fertilizer_schedule=fertilizer_schedule,
                         water_management=water_management,
                         mode=engine_mode,
-                        advanced_options=advanced_options
+                        advanced_options=advanced_options,
+                        sim_years=sim_years
                     )
                     
                     # Dispatch the simulation asynchronously to performance thread pool
@@ -1351,9 +1378,9 @@ with col_right:
                     st.markdown("##### 🌱 Daily Dry Biomass and Grain Weight Accumulation")
                     fig_biomass = px.line(
                         results_df,
-                        x="DAP",
+                        x="Simulation_Timeline_Days",
                         y=["WTOP", "WGRN"],
-                        labels={"value": "Dry Weight (g/m²)", "variable": "Organ Type", "DAP": "Days After Planting (DAP)"},
+                        labels={"value": "Dry Weight (g/m²)", "variable": "Organ Type", "Simulation_Timeline_Days": "Timeline Duration (Days Continuously Formatted)"},
                         color_discrete_map={"WTOP": "#3B82F6", "WGRN": "#10B981"}
                     )
                     fig_biomass.update_layout(
@@ -1364,6 +1391,7 @@ with col_right:
                         yaxis=dict(gridcolor='#E5E7EB'),
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
                     )
+                    fig_biomass.update_xaxes(showspikes=True, spikethickness=1, spikedash="dot", spikemode="across", dtick=365)
                     st.plotly_chart(fig_biomass, width='stretch')
                     
                 # 7. Plot Leaf Area Index (LAI) Trajectory
@@ -1371,9 +1399,9 @@ with col_right:
                     st.markdown("##### 🍀 Leaf Area Index (LAI) Trajectory")
                     fig_lai = px.line(
                         results_df,
-                        x="DAP",
+                        x="Simulation_Timeline_Days",
                         y="LAI",
-                        labels={"LAI": "LAI (m²/m²)", "DAP": "Days After Planting (DAP)"},
+                        labels={"LAI": "LAI (m²/m²)", "Simulation_Timeline_Days": "Timeline Duration (Days Continuously Formatted)"},
                         color_discrete_sequence=["#10B981"]
                     )
                     fig_lai.update_layout(
@@ -1383,6 +1411,7 @@ with col_right:
                         xaxis=dict(gridcolor='#E5E7EB'),
                         yaxis=dict(gridcolor='#E5E7EB')
                     )
+                    fig_lai.update_xaxes(showspikes=True, spikethickness=1, spikedash="dot", spikemode="across", dtick=365)
                     st.plotly_chart(fig_lai, width='stretch')
                     
                 # 8. Plot Daily Temperature Development Stress Impact Chart
@@ -1399,9 +1428,9 @@ with col_right:
                     
                     fig_temp = px.line(
                         results_df,
-                        x="DAP",
+                        x="Simulation_Timeline_Days",
                         y="Temperature Factor",
-                        labels={"Temperature Factor": "Stress Coefficient (1=Optimal, 0=Stressed)", "DAP": "Days After Planting (DAP)"},
+                        labels={"Temperature Factor": "Stress Coefficient (1=Optimal, 0=Stressed)", "Simulation_Timeline_Days": "Timeline Duration (Days Continuously Formatted)"},
                         color_discrete_sequence=["#EF4444"]
                     )
                     fig_temp.update_layout(
@@ -1411,6 +1440,7 @@ with col_right:
                         xaxis=dict(gridcolor='#E5E7EB'),
                         yaxis=dict(gridcolor='#E5E7EB', range=[-0.05, 1.05])
                     )
+                    fig_temp.update_xaxes(showspikes=True, spikethickness=1, spikedash="dot", spikemode="across", dtick=365)
                     st.plotly_chart(fig_temp, width='stretch')
                     
                 # Render Troubleshooting/Diagnostic logs
@@ -1472,10 +1502,10 @@ with col_right:
                 st.markdown("##### 🌱 Biomass Accumulation Overlay (kg/ha)")
                 fig_biomass = px.line(
                     combined_df, 
-                    x="DOY", 
+                    x="Simulation_Timeline_Days", 
                     y="BIOMASS", 
                     color="Scenario", 
-                    labels={"DOY": "Day of Year (DOY)", "BIOMASS": "Biomass (kg/ha)", "Scenario": "Run Label"},
+                    labels={"Simulation_Timeline_Days": "Timeline Duration (Days Continuously Formatted)", "BIOMASS": "Biomass (kg/ha)", "Scenario": "Run Label"},
                     title="Biomass Accumulation Impact Analysis (kg/ha)"
                 )
                 fig_biomass.update_layout(
@@ -1485,16 +1515,17 @@ with col_right:
                     xaxis=dict(gridcolor='#E5E7EB'),
                     yaxis=dict(gridcolor='#E5E7EB')
                 )
+                fig_biomass.update_xaxes(showspikes=True, spikethickness=1, spikedash="dot", spikemode="across", dtick=365)
                 st.plotly_chart(fig_biomass, width='stretch')
                 
                 # Multi-scenario LAI Comparison Chart
                 st.markdown("##### 🍀 Canopy Leaf Area Index (LAI) Overlay")
                 fig_lai = px.line(
                     combined_df, 
-                    x="DOY", 
+                    x="Simulation_Timeline_Days", 
                     y="LAI", 
                     color="Scenario", 
-                    labels={"DOY": "Day of Year (DOY)", "LAI": "Leaf Area Index (m²/m²)", "Scenario": "Run Label"},
+                    labels={"Simulation_Timeline_Days": "Timeline Duration (Days Continuously Formatted)", "LAI": "Leaf Area Index (m²/m²)", "Scenario": "Run Label"},
                     title="Canopy Development Impact Analysis"
                 )
                 fig_lai.update_layout(
@@ -1504,6 +1535,7 @@ with col_right:
                     xaxis=dict(gridcolor='#E5E7EB'),
                     yaxis=dict(gridcolor='#E5E7EB')
                 )
+                fig_lai.update_xaxes(showspikes=True, spikethickness=1, spikedash="dot", spikemode="across", dtick=365)
                 st.plotly_chart(fig_lai, width='stretch')
             else:
                 st.warning("⚠️ Please select at least one scenario run to build charts.")

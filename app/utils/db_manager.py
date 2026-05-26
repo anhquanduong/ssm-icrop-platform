@@ -117,6 +117,13 @@ class DatabaseManager:
                 )
             """)
             
+            # Perform dynamic schema migrations for new crop lifecycle features
+            try:
+                from core.database import migrate_database_schema
+                migrate_database_schema(conn)
+            except Exception as migrate_err:
+                logger.error(f"Failed to execute core database schema migrations: {migrate_err}")
+            
             conn.commit()
             logger.info("SQLite database schema and secure migrations verified successfully.")
 
@@ -145,12 +152,17 @@ class DatabaseManager:
         else:
             param_payload = param_json
             
+        crop_produce_type = param_dict.get("crop_produce_type", "Fruit/Seed")
+        lifecycle_strategy = param_dict.get("lifecycle_strategy", "Annual (Single-Season)")
+        t_dormancy_trigger = param_dict.get("t_dormancy_trigger", 5.0)
+        t_base_winter = param_dict.get("t_base_winter", 0.0)
+            
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO crop_profiles (user_id, crop_name, is_public, parameters_json)
-                VALUES (?, ?, ?, ?)
-            """, (user_id, crop_name.strip(), is_public, param_payload))
+                INSERT INTO crop_profiles (user_id, crop_name, is_public, parameters_json, crop_produce_type, lifecycle_strategy, t_dormancy_trigger, t_base_winter)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (user_id, crop_name.strip(), is_public, param_payload, crop_produce_type, lifecycle_strategy, t_dormancy_trigger, t_base_winter))
             conn.commit()
             profile_id = cursor.lastrowid
             logger.info(f"Crop profile '{crop_name}' (ID: {profile_id}) saved by User {user_id}. Public={is_public}")
@@ -168,9 +180,9 @@ class DatabaseManager:
         profiles = []
         with self.get_connection() as conn:
             cursor = conn.cursor()
-            # Perform a LEFT JOIN on users to fetch the creator's username
+             # Perform a LEFT JOIN on users to fetch the creator's username
             cursor.execute("""
-                SELECT cp.id, cp.user_id, cp.crop_name, cp.is_public, cp.parameters_json, u.username
+                SELECT cp.id, cp.user_id, cp.crop_name, cp.is_public, cp.parameters_json, u.username, cp.crop_produce_type, cp.lifecycle_strategy, cp.t_dormancy_trigger, cp.t_base_winter
                 FROM crop_profiles cp
                 LEFT JOIN users u ON cp.user_id = u.id
                 WHERE cp.is_public = 1 OR cp.user_id = ?
@@ -184,6 +196,10 @@ class DatabaseManager:
                 is_public = r[3]
                 raw_params = r[4]
                 creator = r[5] or "System"
+                db_produce_type = r[6]
+                db_lifecycle_strategy = r[7]
+                db_dormancy_trigger = r[8]
+                db_base_winter = r[9]
                 
                 # Transparent decryption for private profiles
                 if is_public == 0:
@@ -198,6 +214,12 @@ class DatabaseManager:
                         raise PermissionError(f"Data Protection Error: Unauthorized or corrupted key. Decryption failed: {str(e)}")
                 else:
                     params = json.loads(raw_params)
+                
+                # Merge columns into params dictionary as fallback/overwrite
+                params["crop_produce_type"] = db_produce_type or params.get("crop_produce_type", "Fruit/Seed")
+                params["lifecycle_strategy"] = db_lifecycle_strategy or params.get("lifecycle_strategy", "Annual (Single-Season)")
+                params["t_dormancy_trigger"] = db_dormancy_trigger if db_dormancy_trigger is not None else params.get("t_dormancy_trigger", 5.0)
+                params["t_base_winter"] = db_base_winter if db_base_winter is not None else params.get("t_base_winter", 0.0)
                     
                 profiles.append({
                     "id": profile_id,

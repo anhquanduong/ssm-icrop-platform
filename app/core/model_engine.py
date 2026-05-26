@@ -8,6 +8,9 @@ DEFAULT_CROP_PARAMETERS = {
         "CROP": "Maize",
         "Cultivar": "B73*MO17 (SC704)",
         "crop_produce_type": "Fruit/Seed",
+        "lifecycle_strategy": "Annual (Single-Season)",
+        "t_dormancy_trigger": 5.0,
+        "t_base_winter": 0.0,
         # Phenology (GDD / GDD equivalents)
         "TBD": 8.0,            # Base temperature for phenology (°C)
         "TP1D": 34.0,          # Lower optimum temperature for phenology (°C)
@@ -65,6 +68,9 @@ DEFAULT_CROP_PARAMETERS = {
         "CROP": "Sorghum",
         "Cultivar": "M-35-1",
         "crop_produce_type": "Fruit/Seed",
+        "lifecycle_strategy": "Annual (Single-Season)",
+        "t_dormancy_trigger": 5.0,
+        "t_base_winter": 0.0,
         # Phenology (GDD / GDD equivalents)
         "TBD": 8.0,
         "TP1D": 34.0,
@@ -134,7 +140,7 @@ class SimulationResultDataFrame(pd.DataFrame):
         return SimulationResultDataFrame
 
     def __getitem__(self, key):
-        if key == "diagnostic_df":
+        if isinstance(key, str) and key == "diagnostic_df":
             return getattr(self, "diagnostic_df", None)
         return super().__getitem__(key)
 
@@ -154,20 +160,14 @@ class SSMiCropEngine:
                  fertilizer_schedule: Optional[List[Dict[str, Any]]] = None,
                  water_management: Optional[Dict[str, Any]] = None,
                  mode: str = "Advanced",
-                 advanced_options: Optional[Dict[str, bool]] = None):
+                 advanced_options: Optional[Dict[str, bool]] = None,
+                 sim_years: int = 1):
         """
         Initialize the simulation engine with standard parameters and dynamic soil/nutrient schedules.
-        
-        Parameters:
-            weather_df (pd.DataFrame): Daily weather inputs with columns [DOY, TMAX, TMIN, SRAD, RAIN]
-            latitude (float): Latitude of the region (positive for Northern, negative for Southern hemisphere)
-            soil_params (dict): Soil parameters. If None, default multilayer clay-loam properties are loaded.
-            soil_config (dict): Soil baseline config containing total zone depth, initial moisture and PAWC capacity.
-            fertilizer_schedule (list): Dynamic rows detailing schedules of Nitrogen fertilizer rounds.
-            water_management (dict): Schedule arrays detailing irrigation and drainage operations.
         """
         self.weather_df = weather_df.copy()
         self.latitude = latitude
+        self.sim_years = sim_years
         
         # Load or initialize default soil profile properties (5 layers)
         if soil_params is None:
@@ -266,7 +266,7 @@ class SSMiCropEngine:
             return 1.0
         return 0.0
 
-    def run_simulation(self, crop_type: str, pden: float = 8.0, vpdf: float = 1.0, progress_callback = None) -> pd.DataFrame:
+    def run_simulation(self, crop_type: str, pden: float = 8.0, vpdf: float = 1.0, progress_callback = None, sim_years: Optional[int] = None) -> pd.DataFrame:
         """
         Execute the daily SSM-iCrop crop growth simulation loop from sowing to maturity.
         
@@ -275,6 +275,7 @@ class SSMiCropEngine:
             pden (float): Plant density (plants/m², default = 8.0)
             vpdf (float): Vapor pressure deficit adjustment factor (default = 1.0)
             progress_callback (callable): Optional progress reporting callback accepting (current, total)
+            sim_years (int): Optional multi-year duration override
             
         Returns:
             pd.DataFrame: Simulation timeseries dataset representing daily growth variables.
@@ -284,6 +285,13 @@ class SSMiCropEngine:
             raise ValueError(f"Crop type '{crop_type}' is not supported. Supported crops: Maize, Sorghum")
         
         cp = DEFAULT_CROP_PARAMETERS[crop_type]
+        
+        if sim_years is None:
+            sim_years = getattr(self, "sim_years", 1)
+            
+        lifecycle_strategy = cp.get("lifecycle_strategy", "Annual (Single-Season)")
+        t_dormancy_trigger = cp.get("t_dormancy_trigger", 5.0)
+        t_base_winter = cp.get("t_base_winter", 0.0)
         
         # Check if all advanced modular switches are disabled
         all_stresses_disabled = False
@@ -495,16 +503,76 @@ class SSMiCropEngine:
         
         # 4. Daily Calculation Loop
         days_in_dataset = len(self.weather_df)
+        total_steps = sim_years * days_in_dataset
         
-        for idx in range(days_in_dataset):
+        temp_history = []
+        in_dormancy = False
+        consec_spring_days = 0
+        wwood = 0.0
+        
+        for step in range(total_steps):
+            yr = step // days_in_dataset
+            idx = step % days_in_dataset
+            
+            if idx == 0 and yr > 0:
+                if lifecycle_strategy == "Annual (Single-Season)":
+                    cbd = 0.0
+                    msnn = 1.0
+                    lai = 0.0
+                    glai = 0.0
+                    dlai = 0.0
+                    mxlai = 0.0
+                    pla1 = 0.0
+                    pla2 = 0.0
+                    bsg_lai = 0.0
+                    ant_lai = 0.0
+                    wlf = 0.5
+                    wst = 0.5
+                    wveg = wlf + wst
+                    wgrn = 0.0
+                    wtop = wlf + wst
+                    hi = 0.0
+                    ant_dm = 0.0
+                    trldm = 0.0
+                    bsg_dm = 0.0
+                    dhi = 0.0
+                    mat_flag = 0
+                    x_tsi = 0
+                    tu_emr_tsi = 0.0
+                    cum_dtu_emergence = 0.0
+                    pollen_sterility = 0.0
+                else:
+                    cbd = 0.0
+                    mat_flag = 0
+                    x_tsi = 0
+                    tu_emr_tsi = 0.0
+                    cum_dtu_emergence = 0.0
+                    pollen_sterility = 0.0
+            
             if progress_callback:
                 try:
-                    progress_callback(idx + 1, days_in_dataset)
+                    progress_callback(step + 1, total_steps)
                 except Exception:
                     pass
                     
             if mat_flag == 1:
-                break
+                if sim_years == 1:
+                    break
+                else:
+                    if lifecycle_strategy == "Annual (Single-Season)":
+                        lai = 0.0
+                        glai = 0.0
+                        dlai = 0.0
+                        wlf = 0.0
+                        wst = 0.0
+                        wveg = 0.0
+                        wgrn = 0.0
+                        wtop = 0.0
+                        hi = 0.0
+                        ddmp = 0.0
+                        glf = 0.0
+                        gst = 0.0
+                        sgr = 0.0
                 
             row_wth = self.weather_df.iloc[idx]
             doy = int(row_wth["DOY"])
@@ -514,6 +582,31 @@ class SSMiCropEngine:
             rain = float(row_wth["RAIN"])
             
             tmp = (tmax + tmin) / 2.0
+            
+            # Track 5-day moving average temperature
+            temp_history.append(tmp)
+            if len(temp_history) > 5:
+                temp_history.pop(0)
+            avg_temp_5d = sum(temp_history) / len(temp_history)
+            
+            # Dormancy state tracking
+            if lifecycle_strategy != "Annual (Single-Season)":
+                if avg_temp_5d < t_dormancy_trigger:
+                    in_dormancy = True
+                    
+            if in_dormancy:
+                if tmp >= t_dormancy_trigger:
+                    consec_spring_days += 1
+                    if consec_spring_days >= 5:
+                        in_dormancy = False
+                        consec_spring_days = 0
+                        # Spring flush!
+                        lai = max(lai, 0.5)
+                        wlf = max(wlf, 5.0)
+                else:
+                    consec_spring_days = 0
+            
+            active_tbd = t_base_winter if in_dormancy else tbd
             
             # Initialize Nitrogen variables for the day
             SNAVL = self.current_soil_n
@@ -600,34 +693,40 @@ class SSMiCropEngine:
                 tr = 0.0
             
             # --- Phenology Module ---
-            temp_stress = self.calculate_stress_factor(tmp, tbd, tp1d, tp2d, tcd)
-            
-            # Daylength photoperiod calculations
-            pp = self.calculate_photoperiod(doy)
-            
-            if bd_brp <= cbd <= bd_trp:
-                if pp > cpp:
-                    rate_in = 1.0 / (bd_ejutsi + ppsen * (pp - cpp))
-                    r_max = 1.0 / bd_ejutsi
-                    pp_stress = max(0.0, rate_in / r_max)
+            if in_dormancy:
+                temp_stress = 0.0
+                dtu = 0.0
+                bd_inc = 0.0
+                pp = self.calculate_photoperiod(doy)
+            else:
+                temp_stress = self.calculate_stress_factor(tmp, active_tbd, tp1d, tp2d, tcd)
+                
+                # Daylength photoperiod calculations
+                pp = self.calculate_photoperiod(doy)
+                
+                if bd_brp <= cbd <= bd_trp:
+                    if pp > cpp:
+                        rate_in = 1.0 / (bd_ejutsi + ppsen * (pp - cpp))
+                        r_max = 1.0 / bd_ejutsi
+                        pp_stress = max(0.0, rate_in / r_max)
+                    else:
+                        pp_stress = 1.0
                 else:
                     pp_stress = 1.0
-            else:
-                pp_stress = 1.0
-                
-            # GDD unit accumulation
-            dtu = (tp1d - tbd) * temp_stress
-            if cbd > bd_bsg:
-                dtu = dtu * wsfd
-                
-            # Biological day increment
-            if bd_brp <= cbd <= bd_trp:
-                bd_inc = pp_stress
-            else:
-                bd_inc = temp_stress
-                
-            if cbd > bd_bsg:
-                bd_inc = bd_inc * wsfd  # Deficit accelerates biological aging
+                    
+                # GDD unit accumulation
+                dtu = (tp1d - active_tbd) * temp_stress
+                if cbd > bd_bsg:
+                    dtu = dtu * wsfd
+                    
+                # Biological day increment
+                if bd_brp <= cbd <= bd_trp:
+                    bd_inc = pp_stress
+                else:
+                    bd_inc = temp_stress
+                    
+                if cbd > bd_bsg:
+                    bd_inc = bd_inc * wsfd  # Deficit accelerates biological aging
                 
             cbd += bd_inc
             dap += 1
@@ -728,7 +827,10 @@ class SSMiCropEngine:
                 f_nutr = 1.0
             
             # Canopy Expansion (LAI is penalized by both Water stress and N stress)
-            if cbd <= bd_emr:
+            if in_dormancy:
+                glai = 0.0
+                dlai = 0.0
+            elif cbd <= bd_emr:
                 glai = 0.0
                 dlai = 0.0
             elif bd_emr < cbd <= bd_tlm:
@@ -773,7 +875,7 @@ class SSMiCropEngine:
             sgr = 0.0
             transl = 0.0
             
-            if cbd <= bd_emr or cbd > bd_tsg:
+            if cbd <= bd_emr or cbd > bd_tsg or in_dormancy:
                 ddmp = 0.0
             elif bd_emr < cbd <= bd_tlm:
                 flf1 = flf1a if wtop < wtopl else flf1b
@@ -818,6 +920,13 @@ class SSMiCropEngine:
             wlf += glf
             wst += gst
             wgrn += sgr
+            
+            if in_dormancy:
+                lai = max(0.05, 0.9 * lai)
+                wlf = max(0.2, 0.9 * wlf)
+                
+            if lifecycle_strategy == "Cyclical Perennial":
+                wwood += 0.2 * gst
 
             # ---------------------------------------------------------------
             # MASS CONSERVATION — pool totals recalculated every time step.
@@ -1044,7 +1153,11 @@ class SSMiCropEngine:
             
             sim_data.append({
                 "crop_produce_type": active_produce_type,
+                "lifecycle_strategy": lifecycle_strategy,
+                "Current_Year": yr + 1,
+                "Simulation_Timeline_Days": yr * 365 + doy,
                 "WROOT": round(wroot, 2),
+                "WWOOD": round(wwood, 2),
                 "DAP": dap,
                 "DOY": doy,
                 "TMP": round(tmp, 2),
@@ -1088,6 +1201,12 @@ class SSMiCropEngine:
                 "NLEACH": round(N_Leached_Daily, 4),
                 "NST": round(f_nutr, 3)
             })
+            
+            # Reset cyclical perennial grain pool at the end of the year's daily loop if mature
+            if idx == days_in_dataset - 1:
+                if lifecycle_strategy == "Cyclical Perennial" and cbd > bd_mat:
+                    wgrn = 0.0
+                    hi = 0.0
             
         df = SimulationResultDataFrame(sim_data)
         df.diagnostic_df = pd.DataFrame(diagnostic_rows)

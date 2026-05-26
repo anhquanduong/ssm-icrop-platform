@@ -21,7 +21,7 @@ class TestHistoryLedger(unittest.TestCase):
         scenario_name = "Dynamic Scenario A"
         formatted_df = format_simulation_run(raw_df, scenario_name)
         
-        self.assertEqual(list(formatted_df.columns), ["DOY", "BIOMASS", "LAI", "F_WATER", "F_NUTR", "Model_Fidelity", "Management", "Scenario"])
+        self.assertEqual(list(formatted_df.columns), ["DOY", "Simulation_Timeline_Days", "BIOMASS", "LAI", "F_WATER", "F_NUTR", "Model_Fidelity", "Management", "Scenario"])
         
         # Verify default stress index values are set when missing from results_df
         self.assertListEqual(list(formatted_df["F_WATER"].values), [1.0] * 3)
