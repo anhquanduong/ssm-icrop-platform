@@ -72,15 +72,16 @@ class TestSoilGridsAPI(unittest.TestCase):
         Verify that a network timeout raises an exception and returns stable fallbacks.
         """
         # Simulate network timeout exception
-        mock_get.side_effect = requests.exceptions.Timeout("Connection timed out after 5.0 seconds")
+        mock_get.side_effect = requests.exceptions.Timeout("Connection timed out after 3.0 seconds")
 
         result = fetch_isric_soil_data(21.0285, 105.8542)
 
         # Assert correct default baseline values are assigned gracefully
         self.assertIsNotNone(result)
-        self.assertEqual(result["som"], 2.5)
-        self.assertEqual(result["pawc"], 150.0)
+        self.assertEqual(result["som"], 2.1)
+        self.assertEqual(result["pawc"], 140.0)
         self.assertEqual(result["root_zone_depth"], 1000)
+        self.assertTrue(result.get("is_fallback"))
 
     @patch("requests.Session.get")
     def test_fetch_ocean_status_fallback(self, mock_get):
@@ -96,9 +97,10 @@ class TestSoilGridsAPI(unittest.TestCase):
         result = fetch_isric_soil_data(25.0, -45.0)
 
         self.assertIsNotNone(result)
-        self.assertEqual(result["som"], 2.5)
-        self.assertEqual(result["pawc"], 150.0)
+        self.assertEqual(result["som"], 2.1)
+        self.assertEqual(result["pawc"], 140.0)
         self.assertEqual(result["root_zone_depth"], 1000)
+        self.assertTrue(result.get("is_fallback"))
 
     def test_coordinates_out_of_bounds_fallback(self):
         """
@@ -107,9 +109,10 @@ class TestSoilGridsAPI(unittest.TestCase):
         result = fetch_isric_soil_data(95.0, 200.0)
 
         self.assertIsNotNone(result)
-        self.assertEqual(result["som"], 2.5)
-        self.assertEqual(result["pawc"], 150.0)
+        self.assertEqual(result["som"], 2.1)
+        self.assertEqual(result["pawc"], 140.0)
         self.assertEqual(result["root_zone_depth"], 1000)
+        self.assertTrue(result.get("is_fallback"))
 
 if __name__ == "__main__":
     unittest.main()

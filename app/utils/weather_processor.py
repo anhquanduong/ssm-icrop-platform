@@ -2,6 +2,7 @@ import re
 import io
 import os
 import pandas as pd
+import numpy as np
 import logging
 from typing import Tuple, Dict, Any, Optional
 
@@ -37,20 +38,25 @@ def extract_coords_from_text(text: str) -> Tuple[Optional[float], Optional[float
     
     return extracted_lat, extracted_lon
 
+HEADER_VARIATIONS = {
+    'DOY': ['doy', 'day_of_year', 'day', 'doy_val'],
+    'TMAX': ['tmax', 'temp_max', 't_max', 'max_temp', 'tmax_deg', 'max_t', 'tempmax'],
+    'TMIN': ['tmin', 'temp_min', 't_min', 'min_temp', 'tmin_deg', 'min_t', 'tempmin'],
+    'SRAD': ['srad', 'solar_rad', 'solar_radiation', 'radiation', 'solar', 'rad', 'srad_mj', 'srad_kj', 'solar radiation'],
+    'RAIN': ['rain', 'precipitation', 'rainfall', 'precip', 'ppt', 'rain_mm']
+}
+
 def is_header_row(row_cells: list) -> bool:
     """
     Identifies if a spreadsheet row represents the core SSM column header
     by searching for all five mandatory variables.
     """
-    required = {"doy", "tmax", "tmin", "srad", "rain"}
-    
-    # Lowercase string conversions
     row_strings = [str(c).lower().strip() for c in row_cells if c is not None]
     
     # Count variables matching the target headers
     matches = 0
-    for req in required:
-        if any(req in cell for cell in row_strings):
+    for key, variations in HEADER_VARIATIONS.items():
+        if any(any(var in cell for cell in row_strings) for var in variations):
             matches += 1
             
     return matches == 5
@@ -169,14 +175,43 @@ def parse_ssm_weather_file(file_wrapper) -> Tuple[pd.DataFrame, Optional[float],
         raise RuntimeError(f"Failed to parse weather dataset: {str(e)}")
         
     # 4. Sanitize and structure the data frame
-    df.columns = [str(c).strip().upper() for c in df.columns]
+    # Coerce headers to standard strings dynamically: map 'temp_max', 't_max', 'max_temp' -> 'TMAX' automatically
+    header_mapping = {
+        'temp_max': 'TMAX', 't_max': 'TMAX', 'max_temp': 'TMAX', 'tmax': 'TMAX', 'tmax_deg': 'TMAX', 'max_t': 'TMAX', 'tempmax': 'TMAX',
+        'temp_min': 'TMIN', 't_min': 'TMIN', 'min_temp': 'TMIN', 'tmin': 'TMIN', 'tmin_deg': 'TMIN', 'min_t': 'TMIN', 'tempmin': 'TMIN',
+        'solar_rad': 'SRAD', 'solar_radiation': 'SRAD', 'radiation': 'SRAD', 'solar': 'SRAD', 'rad': 'SRAD', 'srad': 'SRAD', 'srad_mj': 'SRAD', 'srad_kj': 'SRAD', 'solar radiation': 'SRAD',
+        'precipitation': 'RAIN', 'rainfall': 'RAIN', 'precip': 'RAIN', 'ppt': 'RAIN', 'rain': 'RAIN', 'rain_mm': 'RAIN',
+        'day_of_year': 'DOY', 'day': 'DOY', 'doy': 'DOY', 'doy_val': 'DOY',
+        'year': 'YEAR', 'years': 'YEAR', 'yr': 'YEAR'
+    }
+
+    mapped_columns = {}
+    for col in df.columns:
+        col_str = str(col).strip().lower()
+        if col_str in header_mapping:
+            mapped_columns[col] = header_mapping[col_str]
+        else:
+            # Substring fallback matching
+            matched = False
+            for k, standard in header_mapping.items():
+                if k in col_str:
+                    mapped_columns[col] = standard
+                    matched = True
+                    break
+            if not matched:
+                mapped_columns[col] = str(col).strip().upper()
+
+    df = df.rename(columns=mapped_columns)
     
     # Try to find a YEAR column
     year_col = None
-    for col in df.columns:
-        if col in ['YEAR', 'YEARS', 'YR']:
-            year_col = col
-            break
+    if 'YEAR' in df.columns:
+        year_col = 'YEAR'
+    else:
+        for col in df.columns:
+            if col in ['YEAR', 'YEARS', 'YR']:
+                year_col = col
+                break
             
     # If YEAR is found, rename it to 'YEAR', otherwise try parsing DATE column, else default to 2025
     if year_col:
@@ -192,7 +227,6 @@ def parse_ssm_weather_file(file_wrapper) -> Tuple[pd.DataFrame, Optional[float],
         
     required_cols = ['YEAR', 'DOY', 'TMAX', 'TMIN', 'SRAD', 'RAIN']
     for col in required_cols:
-        # Check if column is represented in current dataframe (exclude YEAR as we handled it)
         if col == 'YEAR':
             continue
         if col not in df.columns:
@@ -206,51 +240,51 @@ def parse_ssm_weather_file(file_wrapper) -> Tuple[pd.DataFrame, Optional[float],
                 df = df.rename(columns={matched_col: col})
             else:
                 raise ValueError(f"Required weather parameter '{col}' is missing in file.")
-                
-        # Force numeric conversions, turning trailing spaces/strings into NaN safely
-        df[col] = pd.to_numeric(df[col], errors='coerce')
-        
-    # Clean rows with missing values in required parameters
-    df = df.dropna(subset=required_cols)
-    
-    # Cast integers and floats
+
+    # Convert YEAR and DOY to numeric, drop rows with structurally missing DOY/YEAR
+    df['YEAR'] = pd.to_numeric(df['YEAR'], errors='coerce')
+    df['DOY'] = pd.to_numeric(df['DOY'], errors='coerce')
+    df = df.dropna(subset=['YEAR', 'DOY'])
     df['YEAR'] = df['YEAR'].astype(int)
     df['DOY'] = df['DOY'].astype(int)
+
+    # Force numeric conversions on other meteorological variables, turning trailing spaces/strings into NaN safely
     for col in ['TMAX', 'TMIN', 'SRAD', 'RAIN']:
-        df[col] = df[col].astype(float)
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    # Inject temperature biophysical bounds checking (-15 to 60 °C) before interpolation
+    df.loc[(df['TMAX'] < -15.0) | (df['TMAX'] > 60.0), 'TMAX'] = np.nan
+    df.loc[(df['TMIN'] < -15.0) | (df['TMIN'] > 60.0), 'TMIN'] = np.nan
 
     # -----------------------------------------------------------------
     # SRAD UNIT AUTO-DETECTION AND SCALING
     # SSM/BOKU files store SRAD in kJ/m²/day (typical range 2000-25000).
     # Open-Meteo API returns MJ/m²/day (typical range 5-35).
     # Detect unit by inspecting the 95th percentile of the SRAD column:
-    #   > 200  → likely kJ/m²/day   → divide by 1000
-    #   40-200 → check for Wh/m²    → multiply by 0.0036
-    #   5-40   → already MJ/m²/day  → no conversion needed
     # -----------------------------------------------------------------
     srad_p95 = df['SRAD'].quantile(0.95)
-    if srad_p95 > 200.0:
-        # kJ/m²/day detected — convert to MJ/m²/day
-        df['SRAD'] = df['SRAD'] / 1000.0
-        logger.info(
-            f"SRAD auto-converted from kJ/m²/day to MJ/m²/day "
-            f"(detected 95th-pct value: {srad_p95:.1f} kJ/m²/day)."
-        )
-    elif srad_p95 > 40.0:
-        # Wh/m²/day detected — convert to MJ/m²/day (1 Wh = 0.0036 MJ)
-        df['SRAD'] = df['SRAD'] * 0.0036
-        logger.info(
-            f"SRAD auto-converted from Wh/m²/day to MJ/m²/day "
-            f"(detected 95th-pct value: {srad_p95:.1f} Wh/m²/day)."
-        )
-    else:
-        logger.info(
-            f"SRAD values appear to be in MJ/m²/day already "
-            f"(95th-pct: {srad_p95:.2f} MJ/m²/day). No conversion applied."
-        )
+    if pd.notnull(srad_p95):
+        if srad_p95 > 200.0:
+            # kJ/m²/day detected — convert to MJ/m²/day
+            df['SRAD'] = df['SRAD'] / 1000.0
+            logger.info(f"SRAD auto-converted from kJ/m²/day to MJ/m²/day (95th-pct: {srad_p95:.1f}).")
+        elif srad_p95 > 40.0:
+            # Wh/m²/day detected — convert to MJ/m²/day (1 Wh = 0.0036 MJ)
+            df['SRAD'] = df['SRAD'] * 0.0036
+            logger.info(f"SRAD auto-converted from Wh/m²/day to MJ/m²/day (95th-pct: {srad_p95:.1f}).")
+        else:
+            logger.info(f"SRAD values appear to be in MJ/m²/day already (95th-pct: {srad_p95:.2f}).")
 
-    # Final safety clamp: physical radiation range is 0 to 50 MJ/m²/day
-    df['SRAD'] = df['SRAD'].clip(lower=0.0, upper=50.0)
+    # Inject radiation biophysical bounds checking (0 to 45 MJ/m²/day) before interpolation
+    df.loc[(df['SRAD'] < 0.0) | (df['SRAD'] > 45.0), 'SRAD'] = np.nan
+    
+    # Clip precipitation to be non-negative
+    df.loc[df['RAIN'] < 0.0, 'RAIN'] = np.nan
+
+    # Linearly interpolate outliers, unconvertible characters, or NaNs using surrounding days
+    for col in ['TMAX', 'TMIN', 'SRAD', 'RAIN']:
+        df[col] = df[col].interpolate(method='linear', limit_direction='both').fillna(0.0)
+        df[col] = df[col].astype(float)
 
     # Drop peripheral columns (like RH or WIND)
     final_df = df[required_cols].copy().reset_index(drop=True)

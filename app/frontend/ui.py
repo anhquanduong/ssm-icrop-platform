@@ -815,6 +815,9 @@ with col_left:
                         st.session_state["pawc_key"] = isric_profile["pawc"]
                         st.session_state["depth_key"] = int(isric_profile["root_zone_depth"])
                         
+                        if isric_profile.get("is_fallback", False):
+                            st.toast("⚠️ ISRIC SoilGrids API down or timed out. Local fallback deployed.", icon="🌍")
+                
                 st.rerun()  # Halt execution and render immediately with the new coordinates
 
         # 4. BALANCED NUMERIC ENTRY SYNC

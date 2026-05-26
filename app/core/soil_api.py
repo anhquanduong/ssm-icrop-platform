@@ -22,9 +22,10 @@ def fetch_isric_soil_data(lat: float, lon: float) -> dict:
     """
     # Baseline defaults to guarantee uninterrupted simulation flow
     fallback_profile = {
-        "som": 2.5,
-        "pawc": 150.0,
-        "root_zone_depth": 1000
+        "som": 2.1,
+        "pawc": 140.0,
+        "root_zone_depth": 1000,
+        "is_fallback": True
     }
     
     # Check coordinate bounds
@@ -54,12 +55,12 @@ def fetch_isric_soil_data(lat: float, lon: float) -> dict:
     
     try:
         logger.info(f"SoilGrids REST API request: lat={lat}, lon={lon}")
-        # Enforce strict 5-second timeout as required by the system spec
-        response = session.get(url, params=params, timeout=5)
+        # Enforce strict 3-second timeout as required by the system spec
+        response = session.get(url, params=params, timeout=3)
         
-        # Intercept common server errors (e.g. out of land bounds)
+        # Intercept common server errors (e.g. out of land bounds or 500 errors)
         if response.status_code in [400, 404, 500]:
-            logger.warning(f"SoilGrids returned status {response.status_code}. Likely ocean pixel.")
+            logger.warning(f"SoilGrids returned status {response.status_code}. Likely ocean pixel or error.")
             return fallback_profile
             
         response.raise_for_status()
