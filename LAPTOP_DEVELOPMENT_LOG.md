@@ -69,6 +69,13 @@ We identified and resolved the browser security sandbox trap:
 * **The Issue**: Streamlit's iframe components (`st.components.v1.html`) are sandboxed and served from a separate origin, causing the browser to throw a cross-origin security exception whenever the iframe script attempts to read/write `localStorage` or execute `window.parent.location.reload()`, which completely broke logins.
 * **The Solution**: We integrated `streamlit-cookies-controller` natively in Python. The application now reads, sets, and removes client-side cookies directly over Streamlit's secure WebSocket bridge without invoking iframe sandboxes. Logins and logouts now execute instantly with smooth `st.rerun()` reactivity and flawless persistence across tabs and refreshes.
 
+### 10. Ported Persistent Cookie Authentication and SSM-iCrop 1 Branding to Production App
+To align both platforms under the same premium, robust authentication model:
+* **The Solution**: We ported the native `streamlit-cookies-controller` solution directly to the `/app/` core production folders.
+* **Compatibility Protection**: Implemented the cookie namespace under the unique ID `"icrop1_session_token"` so that a user testing both version 1 and version 2 concurrently in the same browser will never experience session cookie collisions or overrides.
+* **App 1 Branding**: Added the high-fidelity CSS/HTML logo brand header to `/app/frontend/ui.py` uniquely identifying it as `🌱 SSM-iCrop1 v1.5 Baseline` above the cockpit visualization tabs.
+* **Auto-Setup Verification**: Included `streamlit-cookies-controller` in the root `requirements.txt` to guarantee automatic installation on all sync targets via `run_app.bat`.
+
 ---
 
 ## 🔄 How to Resume on Your Home PC
@@ -81,6 +88,7 @@ When you open this folder on your Home PC:
 
 ---
 
-*Log generated on 2026-05-27 00:25 (Laptop Local Time) by Antigravity.*
+*Log generated on 2026-05-27 09:45 (Laptop Local Time) by Antigravity.*
+
 
 
