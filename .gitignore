@@ -5,11 +5,17 @@ env_local/
 env/
 __pycache__/
 *.pyc
+*.pyo
+
+# Exclude pytest cache
+.pytest_cache/
 
 # Exclude secrets & keys
 .streamlit/secrets.toml
 Email_16code.txt
-*.txt
+
+# Exclude specific sensitive text files only
+LAPTOP_DEVELOPMENT_LOG.md
 
 # Exclude local database copies containing test user credentials
 *.db
@@ -19,3 +25,10 @@ production_backup.db
 # Exclude hidden operating system metadata
 .DS_Store
 Thumbs.db
+
+# iCrop 2 lives in its own independent repository — do not track here
+icrop2/
+
+# Exclude untracked reference archives and user documents
+SSM_user_guide.docx
+Scientific\ background.docx
