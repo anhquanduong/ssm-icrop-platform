@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import datetime
+from streamlit_cookies_controller import CookieController
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -52,6 +53,7 @@ from utils.auth_secure import (
     execute_password_reset_token, 
     update_user_profile,
     resend_verification_email,
+    verify_session_token,
     LOCAL_MAILBOX_SIMULATOR
 )
 
@@ -233,6 +235,26 @@ if "last_soil_profile" not in st.session_state:
     st.session_state.last_soil_profile = None
 if "last_weather_status_msg" not in st.session_state:
     st.session_state.last_weather_status_msg = ""
+if "icrop1_cookie_controller" not in st.session_state:
+    st.session_state.icrop1_cookie_controller = CookieController()
+controller = st.session_state.icrop1_cookie_controller
+
+# Check cookies for persistent sessions if not currently authenticated
+if not st.session_state.logged_in:
+    token = controller.get("icrop1_session_token")
+    if token:
+        s_success, s_payload = verify_session_token(token)
+        if s_success:
+            st.session_state.logged_in = True
+            st.session_state.user_id = s_payload["user_id"]
+            st.session_state.username = s_payload["username"]
+            st.session_state.email = s_payload["email"]
+            st.session_state.name = s_payload["name"]
+            st.session_state.workplace = s_payload["workplace"]
+            st.session_state.is_verified = s_payload["is_verified"]
+            st.session_state.session_token = s_payload["session_token"]
+            st.session_state.session_key = s_payload["session_key"]
+            st.rerun()
 
 # Intercept and process browser query parameters for activation and resets
 query_params = st.query_params
@@ -296,6 +318,7 @@ if not st.session_state.logged_in:
                 st.session_state.session_token = payload["session_token"]
                 st.session_state.session_key = payload.get("session_key")
                 
+                controller.set("icrop1_session_token", payload["session_token"])
                 st.success("Access Granted! Loading C4 simulation core...")
                 st.rerun()
             else:
@@ -404,6 +427,7 @@ if st.sidebar.button("🚪 Log Out", width='stretch'):
     st.session_state.is_verified = 0
     st.session_state.session_token = None
     st.session_state.session_key = None
+    controller.remove("icrop1_session_token")
     st.rerun()
 
 # ----------------- SIDEBAR CONFIGURATION (Crop parameter routing & tweak panel) -----------------
@@ -757,6 +781,7 @@ with col_left:
                 "use_heat_shock": use_heat_shock
             }
     
+    sim_years = 1
     st.markdown("##### 1. Meteorological Ingestion Engine")
     weather_source = st.radio(
         "Select Weather Data Source",
@@ -1130,6 +1155,21 @@ with col_left:
 
 # ----------------- RIGHT COLUMN: CHARTS & METRICS VIEWPORT -----------------
 with col_right:
+    # Inject SSM-iCrop 1 branding logo block
+    st.markdown(
+        """
+        <div style="display: flex; align-items: center; margin-bottom: 20px;">
+            <span style="font-size: 28px; font-weight: 800; color: #1E3A8A; font-family: 'Inter', sans-serif; letter-spacing: -0.5px;">
+                🌱 SSM-iCrop<span style="color: #3B82F6;">1</span>
+            </span>
+            <span style="margin-left: 12px; padding: 3px 8px; font-size: 11px; font-weight: 600; color: #1E40AF; background-color: #DBEAFE; border-radius: 12px; font-family: 'Inter', sans-serif;">
+                v1.5 Baseline
+            </span>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+
     tab_sim, tab_comp, tab_acc = st.tabs(["📊 Simulation Dashboard", "🔄 Scenario Comparison", "👤 My Account"])
     
     with tab_sim:
