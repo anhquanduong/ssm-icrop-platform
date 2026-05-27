@@ -225,6 +225,11 @@ def authenticate_secure_user(username: str, password: str, ip_address: str = "12
             db.reset_failed_attempts(db_username)
             db.log_security_event(uid, "User logged in successfully", ip_address)
             
+            # Generate and persist browser-persistent session token
+            session_token = secrets.token_hex(24)
+            cursor.execute("UPDATE users SET session_token = ? WHERE id = ?", (session_token, uid))
+            conn.commit()
+
             # Derive secure session key unique to that user session
             from utils.crypto_vault import CropCryptoVault
             salt_hex = pwd_hash.split("$")[0]
@@ -238,7 +243,7 @@ def authenticate_secure_user(username: str, password: str, ip_address: str = "12
                 "name": name,
                 "workplace": workplace,
                 "is_verified": is_verified,
-                "session_token": secrets.token_hex(24), # unique session key
+                "session_token": session_token,
                 "session_key": session_key
             }
             return True, "Login successful!", user_payload
@@ -503,3 +508,45 @@ def update_user_profile(user_id: int, new_name: str, new_workplace: str) -> Tupl
         conn.commit()
         db.log_security_event(user_id, "User profile updated", "127.0.0.1")
         return True, "Profile details updated successfully!"
+
+def verify_session_token(token: str) -> Tuple[bool, Optional[Dict[str, Any]]]:
+    """
+    Validates a browser-persistent session token, loads canonical user details,
+    and derives the corresponding cryptographic key to preserve security.
+    """
+    token_clean = token.strip()
+    if not token_clean:
+        return False, None
+        
+    db = DatabaseManager()
+    with db.get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, username, email, name, workplace, is_verified, password_hash 
+            FROM users 
+            WHERE session_token = ?
+        """, (token_clean,))
+        row = cursor.fetchone()
+        
+        if row is None:
+            return False, None
+            
+        uid, db_username, email, name, workplace, is_verified, pwd_hash = row
+        
+        # Derive secure session key unique to that user session
+        from utils.crypto_vault import CropCryptoVault
+        salt_hex = pwd_hash.split("$")[0]
+        session_key = CropCryptoVault.generate_key_from_user_session(pwd_hash, salt_hex)
+        
+        user_payload = {
+            "user_id": uid,
+            "username": db_username,
+            "email": email,
+            "name": name,
+            "workplace": workplace,
+            "is_verified": is_verified,
+            "session_token": token_clean,
+            "session_key": session_key
+        }
+        return True, user_payload
+
